@@ -1,0 +1,141 @@
+  <!-- index.ejs-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Services Checkout</title>
+
+  <!-- CSP with a dynamic nonce -->
+  <meta http-equiv="Content-Security-Policy" content="
+  default-src 'self' https://www.paypal.com https://*.paypal.com;
+  script-src 'self' 'nonce-<%= nonce %>' 'strict-dynamic' https://www.paypal.com https://*.paypal.com;
+  style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+  img-src 'self' data: https://www.paypalobjects.com;
+  frame-src 'self' https://www.paypal.com https://*.paypal.com https://www.sandbox.paypal.com;
+  connect-src 'self' https://www.paypal.com https://*.paypal.com https://www.sandbox.paypal.com;
+  upgrade-insecure-requests;
+">
+
+
+<link rel="stylesheet" href="/styles.css">
+  <!-- Inline script example with dynamic nonce -->
+  <script nonce="<%= nonce %>">
+    console.log("This script is allowed with a dynamic nonce!");
+  </script>
+
+  <!-- Inline script for your application -->
+  <script nonce="<%= nonce %>">
+    async function loadPayPalSDK() {
+      try {
+
+        const response = await fetch("/config/paypal");
+        const data = await response.json();
+        if (!data.clientId) throw new Error("Missing PayPal Client ID");
+  
+        const script = document.createElement("script");
+        script.src = `https://www.paypal.com/sdk/js?client-id=${data.clientId}&currency=USD`;
+        script.onload = () => console.log("✅ PayPal SDK Loaded");
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error("Error loading PayPal SDK:", error);
+      }
+    }
+  
+    loadPayPalSDK();
+  
+    function attachBuyButtonHandlers() {
+      document.querySelectorAll(".buy-btn").forEach(button => {
+        button.addEventListener("click", function () {
+          const card = this.parentElement;
+          const selectedService = {
+            name: card.getAttribute("data-name"),
+            price: card.getAttribute("data-price")
+          };
+  
+          document.getElementById("paypal-button-container").style.display = "block";
+          renderPayPalButton(selectedService);
+        });
+      });
+    }
+  
+    function renderPayPalButton(service) {
+      const container = document.getElementById("paypal-button-container");
+      container.innerHTML = "";
+  
+      paypal.Buttons({
+        createOrder: function (data, actions) {
+          return actions.order.create({
+            purchase_units: [{
+              amount: { currency_code: "USD", value: service.price },
+              description: service.name
+            }]
+          });
+        },
+        onApprove: function (data, actions) {
+          return actions.order.capture().then(function (details) {
+            alert("Transaction successful! " + details.payer.name.given_name);
+  
+            const transactionData = {
+              transaction_id: details.id,
+              payer_name: details.payer.name.given_name,
+              payer_email: details.payer.email_address,
+              amount: service.price,
+              currency: "USD",
+              payment_status: details.status,
+              service_type: service.name
+            };
+  
+          fetch("/save-transaction", {
+
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(transactionData)
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert("Transaction saved in the database!");
+              } else {
+                alert("Transaction successful, but error saving.");
+              }
+            })
+            .catch(err => console.error("Error saving transaction:", err));
+  
+            container.style.display = "none";
+          });
+        }
+      }).render("#paypal-button-container");
+    }
+  
+    document.addEventListener("DOMContentLoaded", attachBuyButtonHandlers);
+  </script>
+
+</head>
+<body>
+  <h2>Select a Service</h2>
+  <div class="services-container">
+    <div class="service-card" data-name="Basic Service" data-price="100">
+      <h3>Basic Service</h3>
+      <p>Price: $100</p>
+      <button class="buy-btn">Buy Now</button>
+    </div>
+    <div class="service-card" data-name="Premium Service" data-price="100">
+      <h3>Premium Service</h3>
+      <p>Price: $200</p>
+      <button class="buy-btn">Buy Now</button>
+    </div>
+    <div class="service-card" data-name="Enterprise Service" data-price="100">
+      <h3>Enterprise Service</h3>
+      <p>Price: $300</p>
+      <button class="buy-btn">Buy Now</button>
+    </div>
+  </div>
+  
+  <!-- PayPal Buttons -->
+  <div class="paypal-container">
+    <div id="paypal-button-container"></div>
+  </div>
+  
+</body>
+</html>
