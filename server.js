@@ -75,37 +75,31 @@ app.get("/config/paypal", (req, res) => {
 });
 
 // API route to return service details securely
-app.get("/api/services", (req, res) => {
-  const services = [
-    { id: "basic", name: "Basic Service", price: 100 },
-    { id: "premium", name: "Premium Service", price: 200 },
-    { id: "enterprise", name: "Enterprise Service", price: 300 }
-  ];
-  res.json(services);
-});
+const router = express.Router();
 
-// Validate Service Route
-app.post("/api/validate-service", async (req, res) => {
-  const { serviceId } = req.body;
 
-  if (!serviceId) {
-    return res.status(400).json({ success: false, error: "Service ID is required." });
-  }
+// Simulated services database
+const services = [
+  { id: 1, name: "Basic Service", price: 100 },
+  { id: 2, name: "Premium Service", price: 200 },
+  { id: 3, name: "Enterprise Service", price: 300 }
+];
 
-  // Find service by ID
-  const services = [
-    { id: "basic", name: "Basic Service", price: 100 },
-    { id: "premium", name: "Premium Service", price: 200 },
-    { id: "enterprise", name: "Enterprise Service", price: 300 }
-  ];
-  const service = services.find(s => s.id === serviceId);
+// Validate service route
+router.post("/api/validate-service", (req, res) => {
+  const { name } = req.body;
+
+  // Find the service by name
+  const service = services.find(s => s.name === name);
 
   if (!service) {
-    return res.status(404).json({ success: false, error: "Service not found." });
+    return res.status(400).json({ error: "Invalid service selection" });
   }
 
-  res.json({ success: true, service });
+  res.json({ name: service.name, price: service.price });
 });
+
+app.use(router);
 
 // Save Transaction Route
 app.post(
@@ -148,6 +142,8 @@ app.use((err, req, res, next) => {
   logger.error("❌ Unhandled Error", { error: err.message });
   res.status(500).json({ success: false, error: "An unexpected error occurred." });
 });
+
+app.use(router);
 
 // Start Server
 const port = process.env.PORT || 5000;
