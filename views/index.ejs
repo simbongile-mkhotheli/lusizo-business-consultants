@@ -5,17 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Services Checkout</title>
 
-  <meta http-equiv="Content-Security-Policy" content="
-  default-src 'self' https://www.paypal.com https://*.paypal.com;
-  script-src 'self' 'nonce-<%= nonce %>' 'strict-dynamic' https://www.paypal.com https://*.paypal.com;
-  style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
-  img-src 'self' data: https://www.paypalobjects.com;
-  frame-src 'self' https://www.paypal.com https://*.paypal.com https://www.sandbox.paypal.com;
-  connect-src 'self' https://www.paypal.com https://*.paypal.com https://www.sandbox.paypal.com;
-  upgrade-insecure-requests;">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+
+  <!-- All CSP headers are now set via Helmet middleware on the server -->
   <script nonce="<%= nonce %>">
+    // Fetch service prices and update the DOM
     async function fetchServicePrices() {
       try {
         const response = await fetch("/api/services");
@@ -34,6 +29,7 @@
 
     document.addEventListener("DOMContentLoaded", fetchServicePrices);
 
+    // Dynamically load the PayPal SDK based on our config endpoint
     async function loadPayPalSDK() {
       try {
         const response = await fetch("/config/paypal");
@@ -51,6 +47,7 @@
 
     loadPayPalSDK();
 
+    // Validate that the selected service is valid
     async function validateService(serviceName) {
       try {
         const response = await fetch("/api/validate-service", {
@@ -69,6 +66,7 @@
       }
     }
 
+    // Attach click event handlers to buy buttons
     function attachBuyButtonHandlers() {
       document.querySelectorAll(".buy-btn").forEach(button => {
         button.addEventListener("click", async function () {
@@ -90,6 +88,7 @@
       });
     }
 
+    // Render the PayPal button for the given service
     function renderPayPalButton(service, container) {
       // Clear any existing content in the container
       container.innerHTML = "";
@@ -147,19 +146,19 @@
   <div class="services-container">
     <div class="service-card" data-name="Basic Service" data-price="10">
       <h3>Basic Service</h3>
-      <p id="price-basic">Price: $100</p>
+      <p id="price-1">Price: $100</p>
       <button class="buy-btn" data-service="Basic Service">Buy Now</button>
       <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none;"></div>
     </div>
     <div class="service-card" data-name="Premium Service" data-price="20">
       <h3>Premium Service</h3>
-      <p id="price-premium">Price: $200</p>
+      <p id="price-2">Price: $200</p>
       <button class="buy-btn" data-service="Premium Service">Buy Now</button>
       <div class="paypal-button-container" id="paypal-button-container-premium" style="display: none;"></div>
     </div>
     <div class="service-card" data-name="Enterprise Service" data-price="300">
       <h3>Enterprise Service</h3>
-      <p id="price-enterprise">Price: $300</p>
+      <p id="price-3">Price: $300</p>
       <button class="buy-btn" data-service="Enterprise Service">Buy Now</button>
       <div class="paypal-button-container" id="paypal-button-container-enterprise" style="display: none;"></div>
     </div>

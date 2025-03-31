@@ -8,6 +8,7 @@ const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
 const winston = require("winston");
 const crypto = require("crypto");
+const helmet = require("helmet");
 
 const app = express();
 
@@ -56,13 +57,50 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Set View Engine
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'ejs');
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "ejs");
+
+// Generate a nonce for each request and store it in res.locals
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString("base64");
+  next();
+});
+
+// Use Helmet with a custom Content Security Policy that utilizes the generated nonce
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
+      scriptSrc: [
+        "'self'",
+        (req, res) => `'nonce-${res.locals.nonce}'`,
+        "'strict-dynamic'",
+        "https://www.paypal.com",
+        "https://*.paypal.com"
+      ],
+      styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
+      frameSrc: [
+        "'self'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+        "https://www.sandbox.paypal.com"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+        "https://www.sandbox.paypal.com"
+      ],
+      upgradeInsecureRequests: [] // Optional: leave empty if not required
+    }
+  })
+);
 
 // Home Route
 app.get("/", (req, res) => {
-  const nonce = crypto.randomBytes(16).toString("base64");
-  res.render("index", { nonce });
+  // Use the nonce from res.locals rather than generating a new one
+  res.render("index", { nonce: res.locals.nonce });
 });
 
 // PayPal Config Route
@@ -73,6 +111,8 @@ app.get("/config/paypal", (req, res) => {
   }
   res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
 });
+
+// Services API Route
 app.get("/api/services", (req, res) => {
   res.json([
     { id: 1, name: "Basic Service", price: 100 },
@@ -83,7 +123,6 @@ app.get("/api/services", (req, res) => {
 
 // API route to return service details securely
 const router = express.Router();
-
 
 // Simulated services database
 const services = [
@@ -149,8 +188,6 @@ app.use((err, req, res, next) => {
   logger.error("❌ Unhandled Error", { error: err.message });
   res.status(500).json({ success: false, error: "An unexpected error occurred." });
 });
-
-app.use(router);
 
 // Start Server
 const port = process.env.PORT || 5000;
