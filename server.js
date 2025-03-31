@@ -73,6 +73,13 @@ app.get("/config/paypal", (req, res) => {
   }
   res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
 });
+app.get("/api/services", (req, res) => {
+  res.json([
+    { id: 1, name: "Basic Service", price: 100 },
+    { id: 2, name: "Premium Service", price: 200 },
+    { id: 3, name: "Enterprise Service", price: 300 }
+  ]);
+});
 
 // API route to return service details securely
 const router = express.Router();
