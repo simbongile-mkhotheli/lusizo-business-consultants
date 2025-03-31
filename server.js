@@ -59,7 +59,6 @@ app.use(limiter);
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 
-
 // Home Route
 app.get("/", (req, res) => {
   const nonce = crypto.randomBytes(16).toString("base64");
@@ -73,6 +72,17 @@ app.get("/config/paypal", (req, res) => {
     return res.status(500).json({ error: "PayPal Client ID not found" });
   }
   res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
+});
+
+// NEW: API route to return service details securely
+app.get("/api/services", (req, res) => {
+  // You can modify these details or load them from a database.
+  const services = [
+    { id: "basic", name: "Basic Service", price: 100 },
+    { id: "premium", name: "Premium Service", price: 200 },
+    { id: "enterprise", name: "Enterprise Service", price: 300 }
+  ];
+  res.json(services);
 });
 
 // Save Transaction Route
