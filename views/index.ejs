@@ -26,9 +26,26 @@
 
   <!-- Inline script for your application -->
   <script nonce="<%= nonce %>">
+    async function fetchServicePrices() {
+      try {
+        const response = await fetch("/api/services");
+        const services = await response.json();
+  
+        services.forEach(service => {
+          const priceElement = document.querySelector(`#price-${service.id}`);
+          if (priceElement) {
+            priceElement.textContent = `Price: $${service.price}`;
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching service prices:", error);
+      }
+    }
+  
+    document.addEventListener("DOMContentLoaded", fetchServicePrices);
+  
     async function loadPayPalSDK() {
       try {
-
         const response = await fetch("/config/paypal");
         const data = await response.json();
         if (!data.clientId) throw new Error("Missing PayPal Client ID");
@@ -46,15 +63,28 @@
   
     function attachBuyButtonHandlers() {
       document.querySelectorAll(".buy-btn").forEach(button => {
-        button.addEventListener("click", function () {
-          const card = this.parentElement;
-          const selectedService = {
-            name: card.getAttribute("data-name"),
-            price: card.getAttribute("data-price")
-          };
+        button.addEventListener("click", async function () {
+          const serviceName = this.getAttribute("data-service");
   
-          document.getElementById("paypal-button-container").style.display = "block";
-          renderPayPalButton(selectedService);
+          try {
+            const response = await fetch("/api/validate-service", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: serviceName })
+            });
+  
+            const validService = await response.json();
+  
+            if (!validService || !validService.price) {
+              throw new Error("Invalid service selection");
+            }
+  
+            document.getElementById("paypal-button-container").style.display = "block";
+            renderPayPalButton(validService);
+          } catch (error) {
+            console.error("Error validating service:", error);
+            alert("Invalid service selection. Please refresh the page.");
+          }
         });
       });
     }
@@ -64,13 +94,25 @@
       container.innerHTML = "";
   
       paypal.Buttons({
-        createOrder: function (data, actions) {
-          return actions.order.create({
-            purchase_units: [{
-              amount: { currency_code: "USD", value: service.price },
-              description: service.name
-            }]
-          });
+        createOrder: async function (data, actions) {
+          return fetch("/api/validate-service", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: service.name })
+          })
+            .then(response => response.json())
+            .then(validService => {
+              if (!validService || !validService.price) {
+                throw new Error("Invalid service selection");
+              }
+  
+              return actions.order.create({
+                purchase_units: [{
+                  amount: { currency_code: "USD", value: validService.price },
+                  description: validService.name
+                }]
+              });
+            });
         },
         onApprove: function (data, actions) {
           return actions.order.capture().then(function (details) {
@@ -86,21 +128,20 @@
               service_type: service.name
             };
   
-          fetch("/save-transaction", {
-
+            fetch("/save-transaction", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(transactionData)
             })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                alert("Transaction saved in the database!");
-              } else {
-                alert("Transaction successful, but error saving.");
-              }
-            })
-            .catch(err => console.error("Error saving transaction:", err));
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  alert("Transaction saved in the database!");
+                } else {
+                  alert("Transaction successful, but error saving.");
+                }
+              })
+              .catch(err => console.error("Error saving transaction:", err));
   
             container.style.display = "none";
           });
@@ -110,25 +151,28 @@
   
     document.addEventListener("DOMContentLoaded", attachBuyButtonHandlers);
   </script>
+  
 
 </head>
 <body>
   <h2>Select a Service</h2>
   <div class="services-container">
-    <div class="service-card" data-name="Basic Service" data-price="100">
+    <div class="service-card" data-name="Basic Service">
       <h3>Basic Service</h3>
-      <p>Price: $100</p>
-      <button class="buy-btn">Buy Now</button>
+      <p id="price-basic">Loading...</p>
+      <button class="buy-btn" data-service="Basic Service">Buy Now</button>
     </div>
-    <div class="service-card" data-name="Premium Service" data-price="100">
-      <h3>Premium Service</h3>
-      <p>Price: $200</p>
-      <button class="buy-btn">Buy Now</button>
+    
+    <div class="service-card" data-name="Premium Service">
+      <h3>Basic Service</h3>
+      <p id="price-premium">Loading...</p>
+      <button class="buy-btn" data-service="Premium Service">Buy Now</button>
     </div>
-    <div class="service-card" data-name="Enterprise Service" data-price="100">
-      <h3>Enterprise Service</h3>
-      <p>Price: $300</p>
-      <button class="buy-btn">Buy Now</button>
+    
+    <div class="service-card" data-name="Enterprice Service">
+      <h3>Basic Service</h3>
+      <p id="price-enterprice">Loading...</p>
+      <button class="buy-btn" data-service="Enterprice Service">Buy Now</button>
     </div>
   </div>
   
