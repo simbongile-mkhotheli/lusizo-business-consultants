@@ -7,6 +7,7 @@
 
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <meta name="csrf-token" content="<%= csrfToken %>" />
 
   <!-- All CSP headers are now set via Helmet middleware on the server -->
   <script nonce="<%= nonce %>">
@@ -49,22 +50,27 @@
 
     // Validate that the selected service is valid
     async function validateService(serviceName) {
-      try {
-        const response = await fetch("/api/validate-service", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: serviceName })
-        });
+     
+  try {
+    const response = await fetch("/api/validate-service", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+      },
+      body: JSON.stringify({ name: serviceName })
+    });
 
-        if (!response.ok) throw new Error("Invalid service selection");
+    if (!response.ok) throw new Error("Invalid service selection");
 
-        return await response.json();
-      } catch (error) {
-        console.error("Error validating service:", error);
-        alert("Invalid service selection. Please refresh the page.");
-        return null;
-      }
-    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error validating service:", error);
+    alert("Invalid service selection. Please refresh the page.");
+    return null;
+  }
+}
+
 
     // Attach click event handlers to buy buttons
     function attachBuyButtonHandlers() {
@@ -117,19 +123,22 @@
             };
 
             fetch("/save-transaction", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(transactionData)
-            })
-              .then(response => response.json())
-              .then(data => {
-                if (data.success) {
-                  alert("Transaction saved in the database!");
-                } else {
-                  alert("Transaction successful, but error saving.");
-                }
-              })
-              .catch(err => console.error("Error saving transaction:", err));
+  method: "POST",
+  headers: { 
+    "Content-Type": "application/json",
+    "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+  },
+  body: JSON.stringify(transactionData)
+})
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert("Transaction saved in the database!");
+    } else {
+      alert("Transaction successful, but error saving.");
+    }
+  })
+  .catch(err => console.error("Error saving transaction:", err));
 
             // Hide the button container after the transaction
             container.style.display = "none";

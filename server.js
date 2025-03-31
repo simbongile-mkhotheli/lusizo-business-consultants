@@ -9,6 +9,8 @@ const { body, validationResult } = require("express-validator");
 const winston = require("winston");
 const crypto = require("crypto");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
+const csurf = require("csurf");
 
 const app = express();
 
@@ -48,6 +50,9 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 
+// Cookie parser is required for CSRF protection
+app.use(cookieParser());
+
 // Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -65,6 +70,10 @@ app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
+
+// CSRF protection middleware using cookies
+const csrfProtection = csurf({ cookie: true });
+app.use(csrfProtection);
 
 // Use Helmet with a custom Content Security Policy that utilizes the generated nonce
 app.use(
@@ -99,8 +108,8 @@ app.use(
 
 // Home Route
 app.get("/", (req, res) => {
-  // Use the nonce from res.locals rather than generating a new one
-  res.render("index", { nonce: res.locals.nonce });
+  // Use the nonce from res.locals and pass the CSRF token to the template
+  res.render("index", { nonce: res.locals.nonce, csrfToken: req.csrfToken() });
 });
 
 // PayPal Config Route
@@ -131,7 +140,7 @@ const services = [
   { id: 3, name: "Enterprise Service", price: 300 }
 ];
 
-// Validate service route
+// Validate service route (CSRF protection applies to POST requests)
 router.post("/api/validate-service", (req, res) => {
   const { name } = req.body;
 
@@ -147,7 +156,7 @@ router.post("/api/validate-service", (req, res) => {
 
 app.use(router);
 
-// Save Transaction Route
+// Save Transaction Route with CSRF protection
 app.post(
   "/save-transaction",
   [
