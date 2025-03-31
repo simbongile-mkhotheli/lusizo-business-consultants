@@ -1,4 +1,4 @@
-  <!-- index.ejs-->
+<!-- index.ejs-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Services Checkout</title>
 
-  <!-- CSP with a dynamic nonce -->
   <meta http-equiv="Content-Security-Policy" content="
   default-src 'self' https://www.paypal.com https://*.paypal.com;
   script-src 'self' 'nonce-<%= nonce %>' 'strict-dynamic' https://www.paypal.com https://*.paypal.com;
@@ -17,14 +16,7 @@
   upgrade-insecure-requests;
 ">
 
-
 <link rel="stylesheet" href="/styles.css">
-  <!-- Inline script example with dynamic nonce -->
-  <script nonce="<%= nonce %>">
-    console.log("This script is allowed with a dynamic nonce!");
-  </script>
-
-  <!-- Inline script for your application -->
   <script nonce="<%= nonce %>">
     async function fetchServicePrices() {
       try {
@@ -64,13 +56,13 @@
     function attachBuyButtonHandlers() {
       document.querySelectorAll(".buy-btn").forEach(button => {
         button.addEventListener("click", async function () {
-          const serviceName = this.getAttribute("data-service");
+          const serviceId = this.getAttribute("data-service");
   
           try {
             const response = await fetch("/api/validate-service", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: serviceName })
+              body: JSON.stringify({ serviceId })
             });
   
             const validService = await response.json();
@@ -98,7 +90,7 @@
           return fetch("/api/validate-service", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: service.name })
+            body: JSON.stringify({ serviceId: service.id })
           })
             .then(response => response.json())
             .then(validService => {
@@ -152,29 +144,27 @@
     document.addEventListener("DOMContentLoaded", attachBuyButtonHandlers);
   </script>
   
-
 </head>
 <body>
   <h2>Select a Service</h2>
   <div class="services-container">
-    <div class="service-card" data-name="Basic Service" data-price="100">
+    <div class="service-card" data-service="basic">
       <h3>Basic Service</h3>
-      <p>Price: $100</p>
-      <button class="buy-btn">Buy Now</button>
+      <p id="price-basic">Price: $100</p>
+      <button class="buy-btn" data-service="basic">Buy Now</button>
     </div>
-    <div class="service-card" data-name="Premium Service" data-price="100">
+    <div class="service-card" data-service="premium">
       <h3>Premium Service</h3>
-      <p>Price: $200</p>
-      <button class="buy-btn">Buy Now</button>
+      <p id="price-premium">Price: $200</p>
+      <button class="buy-btn" data-service="premium">Buy Now</button>
     </div>
-    <div class="service-card" data-name="Enterprise Service" data-price="100">
+    <div class="service-card" data-service="enterprise">
       <h3>Enterprise Service</h3>
-      <p>Price: $300</p>
-      <button class="buy-btn">Buy Now</button>
+      <p id="price-enterprise">Price: $300</p>
+      <button class="buy-btn" data-service="enterprise">Buy Now</button>
     </div>
   </div>
   
-  <!-- PayPal Buttons -->
   <div class="paypal-container">
     <div id="paypal-button-container"></div>
   </div>
