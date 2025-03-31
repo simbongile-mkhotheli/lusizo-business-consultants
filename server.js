@@ -74,15 +74,37 @@ app.get("/config/paypal", (req, res) => {
   res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
 });
 
-// NEW: API route to return service details securely
+// API route to return service details securely
 app.get("/api/services", (req, res) => {
-  // You can modify these details or load them from a database.
   const services = [
     { id: "basic", name: "Basic Service", price: 100 },
     { id: "premium", name: "Premium Service", price: 200 },
     { id: "enterprise", name: "Enterprise Service", price: 300 }
   ];
   res.json(services);
+});
+
+// Validate Service Route
+app.post("/api/validate-service", async (req, res) => {
+  const { serviceId } = req.body;
+
+  if (!serviceId) {
+    return res.status(400).json({ success: false, error: "Service ID is required." });
+  }
+
+  // Find service by ID
+  const services = [
+    { id: "basic", name: "Basic Service", price: 100 },
+    { id: "premium", name: "Premium Service", price: 200 },
+    { id: "enterprise", name: "Enterprise Service", price: 300 }
+  ];
+  const service = services.find(s => s.id === serviceId);
+
+  if (!service) {
+    return res.status(404).json({ success: false, error: "Service not found." });
+  }
+
+  res.json({ success: true, service });
 });
 
 // Save Transaction Route
