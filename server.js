@@ -11,8 +11,20 @@ const crypto = require("crypto");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const csurf = require("csurf");
-
+const nodemailer = require("nodemailer");
 const app = express();
+
+
+
+
+// Configure the Nodemailer transporter (example using Gmail)
+const transporter = nodemailer.createTransport({
+  service: 'Gmail',
+  auth: {
+    user: process.env.EMAIL_USER, // Your email address from .env
+    pass: process.env.EMAIL_PASS  // Your email password or app-specific password
+  }
+});
 
 // Logger setup
 const logger = winston.createLogger({
@@ -157,6 +169,8 @@ router.post("/api/validate-service", (req, res) => {
 app.use(router);
 
 // Save Transaction Route with CSRF protection
+
+// Save Transaction Route with CSRF protection and email confirmation
 app.post(
   "/save-transaction",
   [
@@ -184,6 +198,23 @@ app.post(
       const result = await pool.query(query, [transaction_id, payer_name, payer_email, amount, currency, payment_status, service_type]);
 
       logger.info("✅ Transaction saved", { transaction_id, payer_email, amount });
+
+      // Send a confirmation email
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: payer_email,
+        subject: "Payment Confirmation",
+        text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`
+      };
+
+      transporter.sendMail(mailOptions, (err, info) => {
+        if (err) {
+          logger.error("❌ Error sending confirmation email:", { error: err.message });
+        } else {
+          logger.info("✅ Confirmation email sent:", { info });
+        }
+      });
+
       res.json({ success: true, message: "Transaction saved", transaction: result.rows[0] });
     } catch (error) {
       logger.error("❌ Database error", { error: error.message });
@@ -191,7 +222,6 @@ app.post(
     }
   }
 );
-
 // Global Error Handler
 app.use((err, req, res, next) => {
   logger.error("❌ Unhandled Error", { error: err.message });

@@ -94,22 +94,23 @@
       });
     }
 
-    // Render the PayPal button for the given service
-    function renderPayPalButton(service, container) {
-      // Clear any existing content in the container
-      container.innerHTML = "";
+   // Render the PayPal button for the given service
+  function renderPayPalButton(service, container) {
+    // Clear any existing content in the container
+    container.innerHTML = "";
 
-      paypal.Buttons({
-        createOrder: async function (data, actions) {
-          return actions.order.create({
-            purchase_units: [{
-              amount: { currency_code: "USD", value: service.price },
-              description: service.name
-            }]
-          });
-        },
-        onApprove: function (data, actions) {
-          return actions.order.capture().then(function (details) {
+    paypal.Buttons({
+      createOrder: async function (data, actions) {
+        return actions.order.create({
+          purchase_units: [{
+            amount: { currency_code: "USD", value: service.price },
+            description: service.name
+          }]
+        });
+      },
+      onApprove: function (data, actions) {
+        return actions.order.capture()
+          .then(function (details) {
             alert("Transaction successful! " + details.payer.name.given_name);
 
             const transactionData = {
@@ -123,29 +124,36 @@
             };
 
             fetch("/save-transaction", {
-  method: "POST",
-  headers: { 
-    "Content-Type": "application/json",
-    "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-  },
-  body: JSON.stringify(transactionData)
-})
-  .then(response => response.json())
-  .then(data => {
-    if (data.success) {
-      alert("Transaction saved in the database!");
-    } else {
-      alert("Transaction successful, but error saving.");
-    }
-  })
-  .catch(err => console.error("Error saving transaction:", err));
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
+                "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+              },
+              body: JSON.stringify(transactionData)
+            })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  alert("Transaction saved in the database!");
+                } else {
+                  alert("Transaction successful, but error saving.");
+                }
+              })
+              .catch(err => {
+                console.error("Error saving transaction:", err);
+                alert("Error saving transaction. Please contact support.");
+              });
 
             // Hide the button container after the transaction
             container.style.display = "none";
+          })
+          .catch(error => {
+            console.error("Error capturing order:", error);
+            alert("Error processing payment. Please try again or contact support.");
           });
-        }
-      }).render(container);
-    }
+      }
+    }).render(container);
+  }
 
     document.addEventListener("DOMContentLoaded", attachBuyButtonHandlers);
   </script>
