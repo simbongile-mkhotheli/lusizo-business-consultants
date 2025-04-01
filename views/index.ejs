@@ -715,11 +715,13 @@
         </div>
       </div>
       <h3 class="card-title">Business <br> Administration</h3>
-      <p class="card-details">
+      <p class="card-details" data-name="Basic Service" data-price="1">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit.
       </p>
-      <a href="#" class="button button--outline"> Pay Now </a>
-      
+      <a  class="buy-btn button button--outline"  data-service="Basic Service"> Pay Now </a>
+
+     
+      <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none;"></div>
       
       </div>
       <div
@@ -742,12 +744,12 @@
       </div>
       </div>
       <h3 class="card-title">Auditors & <br> Accountants</h3>
-      <p class="card-details">
+      <p class="card-details" data-name="Premium Service" data-price="2">
       Lorem ipsum dolor sit amet, consectetur adipiscing elit.
       </p>
       
-      <a href="#" class="button button--outline"> Pay Now </a>
-      
+      <a  class="buy-btn button button--outline"  data-service="Premium Service"> Pay Now </a>
+      <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none;"></div>
       </div>
 
 
@@ -765,12 +767,12 @@
             </div>
           </div>
           <h3 class="card-title">Tax Returns & <br> Registration</h3>
-          <p class="card-details">
+          <p class="card-details" data-name="Enterprise Service" data-price="1">
             Lorem ipsum dolor sit amet, consectetur adipiscing elit.
           </p>
-          <a href="#" class="button button--outline"> Pay Now </a>
+          <a  class="buy-btn button button--outline"  data-service="Enterprise Service"> Pay Now </a>
       
-      
+          <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none;"></div>
         </div>
    
       
@@ -1792,19 +1794,19 @@ class="contact-left-part-image"
 
   <h2>Select a Service</h2>
   <div class="services-container">
-    <div class="service-card" data-name="Basic Service" data-price="10">
+    <div class="service-card" data-name="Basic Service" data-price="1">
       <h3>Basic Service</h3>
       <p id="price-1">Price: $100</p>
       <button class="buy-btn" data-service="Basic Service">Buy Now</button>
       <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none;"></div>
     </div>
-    <div class="service-card" data-name="Premium Service" data-price="20">
+    <div class="service-card" data-name="Premium Service" data-price="2">
       <h3>Premium Service</h3>
       <p id="price-2">Price: $200</p>
       <button class="buy-btn" data-service="Premium Service">Buy Now</button>
       <div class="paypal-button-container" id="paypal-button-container-premium" style="display: none;"></div>
     </div>
-    <div class="service-card" data-name="Enterprise Service" data-price="300">
+    <div class="service-card" data-name="Enterprise Service" data-price="3">
       <h3>Enterprise Service</h3>
       <p id="price-3">Price: $300</p>
       <button class="buy-btn" data-service="Enterprise Service">Buy Now</button>
