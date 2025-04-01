@@ -3320,4 +3320,10 @@
   }
   
   
-  
+  .paypal-button-container{
+    background-color: rgb(0, 255, 13);
+    }
+    
+    .paypal-button-row.paypal-button-layout-vertical{
+      margin-top: 20px;
+    }
