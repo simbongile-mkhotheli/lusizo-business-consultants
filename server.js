@@ -225,7 +225,8 @@ app.post(
 // Global Error Handler
 app.use((err, req, res, next) => {
   logger.error("❌ Unhandled Error", { error: err.message });
-  res.status(500).json({ success: false, error: "An unexpected error occurred." });
+  //res.status(500).json({ success: false, error: "An unexpected error occurred." });
+    res.status(500).json({ success: false, error: "An unexpected error occurred. / Site Under Maintenance" });
 });
 
 // Start Server
