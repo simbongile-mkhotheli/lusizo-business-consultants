@@ -138,9 +138,9 @@ app.get("/config/paypal", (req, res) => {
 // Services API Route
 app.get("/api/services", (req, res) => {
   res.json([
-    { id: 1, name: "Basic Service", price: 100 },
-    { id: 2, name: "Premium Service", price: 200 },
-    { id: 3, name: "Enterprise Service", price: 300 }
+    { id: 1, name: "Basic Service", price: 50 },
+    { id: 2, name: "Premium Service", price: 100 },
+    { id: 3, name: "Enterprise Service", price: 150 }
   ]);
 });
 
@@ -149,9 +149,9 @@ const router = express.Router();
 
 // Simulated services database
 const services = [
-  { id: 1, name: "Basic Service", price: 100 },
-  { id: 2, name: "Premium Service", price: 200 },
-  { id: 3, name: "Enterprise Service", price: 300 }
+  { id: 1, name: "Basic Service", price: 50 },
+  { id: 2, name: "Premium Service", price: 100 },
+  { id: 3, name: "Enterprise Service", price: 150 }
 ];
 
 // Validate service route (CSRF protection applies to POST requests)
