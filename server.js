@@ -30,7 +30,9 @@ const transporter = nodemailer.createTransport({
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
-    winston.format.timestamp(),
+    winston.format.timestamp({
+      format: () => new Date().toLocaleString('en-US', { timeZone: 'Africa/Johannesburg' })
+    }),
     winston.format.json()
   ),
   transports: [
