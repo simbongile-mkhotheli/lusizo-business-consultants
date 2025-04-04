@@ -133,15 +133,18 @@ app.get("/config/paypal", (req, res) => {
 });
 
 // Services API Route (GET /api/services)
-app.get("/api/services", (req, res) => {
-  // This endpoint could also be updated to query the database if desired.
-  // For now, we keep it static for demonstration.
-  res.json([
-    { id: 1, name: "Basic Service", price: 50 },
-    { id: 2, name: "Premium Service", price: 100 },
-    { id: 3, name: "Enterprise Service", price: 150 }
-  ]);
+app.get("/api/services", async (req, res) => {
+  try {
+    // Query the database for all services
+    const queryText = "SELECT id, name, price FROM services ORDER BY id ASC";
+    const { rows } = await pool.query(queryText);
+    res.json(rows);
+  } catch (error) {
+    logger.error("❌ Database error in /api/services", { error: error.message });
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
+
 
 // Updated API route to return service details securely using PostgreSQL
 const router = express.Router();
