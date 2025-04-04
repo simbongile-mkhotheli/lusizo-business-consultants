@@ -14,9 +14,6 @@ const csurf = require("csurf");
 const nodemailer = require("nodemailer");
 const app = express();
 
-
-
-
 // Configure the Nodemailer transporter (example using Gmail)
 const transporter = nodemailer.createTransport({
   service: 'Gmail',
@@ -135,8 +132,10 @@ app.get("/config/paypal", (req, res) => {
   res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
 });
 
-// Services API Route
+// Services API Route (GET /api/services)
 app.get("/api/services", (req, res) => {
+  // This endpoint could also be updated to query the database if desired.
+  // For now, we keep it static for demonstration.
   res.json([
     { id: 1, name: "Basic Service", price: 50 },
     { id: 2, name: "Premium Service", price: 100 },
@@ -144,33 +143,37 @@ app.get("/api/services", (req, res) => {
   ]);
 });
 
-// API route to return service details securely
+// Updated API route to return service details securely using PostgreSQL
 const router = express.Router();
 
-// Simulated services database
-const services = [
-  { id: 1, name: "Basic Service", price: 50 },
-  { id: 2, name: "Premium Service", price: 100 },
-  { id: 3, name: "Enterprise Service", price: 150 }
-];
-
-// Validate service route (CSRF protection applies to POST requests)
-router.post("/api/validate-service", (req, res) => {
+// Service Validation Route (POST /api/validate-service)
+router.post("/api/validate-service", async (req, res) => {
   const { name } = req.body;
 
-  // Find the service by name
-  const service = services.find(s => s.name === name);
-
-  if (!service) {
-    return res.status(400).json({ error: "Invalid service selection" });
+  // Validate input
+  if (!name || typeof name !== "string") {
+    return res.status(400).json({ error: "Service name is required and must be a string." });
   }
 
-  res.json({ name: service.name, price: service.price });
+  try {
+    // Parameterized query to fetch service by name
+    const queryText = "SELECT name, price FROM services WHERE name = $1 LIMIT 1";
+    const { rows } = await pool.query(queryText, [name]);
+
+    // Check if a service was found
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "Invalid service selection" });
+    }
+    
+    // Return the found service details
+    res.json(rows[0]);
+  } catch (error) {
+    logger.error("❌ Database error in validate-service", { error: error.message });
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 app.use(router);
-
-// Save Transaction Route with CSRF protection
 
 // Save Transaction Route with CSRF protection and email confirmation
 app.post(
@@ -224,11 +227,11 @@ app.post(
     }
   }
 );
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   logger.error("❌ Unhandled Error", { error: err.message });
-  //res.status(500).json({ success: false, error: "An unexpected error occurred." });
-    res.status(500).json({ success: false, error: "An unexpected error occurred. / Site Under Maintenance" });
+  res.status(500).json({ success: false, error: "An unexpected error occurred. / Site Under Maintenance" });
 });
 
 // Start Server
