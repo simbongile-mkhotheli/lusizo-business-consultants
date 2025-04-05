@@ -1,9 +1,28 @@
 // ───────────────────────────────────────────────────────────────────────────────
-// 0. Environment Variables (require .env.example to exist with all keys)
+// 0. Environment & Clustering Setup
 // ───────────────────────────────────────────────────────────────────────────────
 require("dotenv-safe").config();
+const cluster = require("cluster");
+const os = require("os");
 
+const numCPUs = os.cpus().length;
+if (cluster.isMaster) {
+  console.log(`Master ${process.pid} is running — forking ${numCPUs} workers`);
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+  cluster.on("exit", (worker, code, signal) => {
+    console.warn(`Worker ${worker.process.pid} died, spawning replacement`);
+    cluster.fork();
+  });
+  return; // Master does not run the rest of the server code
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 1. Module Imports & Logger Setup
+// ───────────────────────────────────────────────────────────────────────────────
 const express = require("express");
+const compression = require("compression");
 const { Pool } = require("pg");
 const cors = require("cors");
 const bodyParser = require("body-parser");
@@ -18,12 +37,10 @@ const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const csurf = require("csurf");
 const nodemailer = require("nodemailer");
+
 const app = express();
 
-
-// ───────────────────────────────────────────────────────────────────────────────
-// 1. Winston Logger Setup
-// ───────────────────────────────────────────────────────────────────────────────
+// Winston Logger
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
@@ -81,27 +98,21 @@ class ApiError extends Error {
 const wrap = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-const compression = require("compression");
-
-// ...
 // ───────────────────────────────────────────────────────────────────────────────
 // 5. Middleware Setup
 // ───────────────────────────────────────────────────────────────────────────────
+app.set("trust proxy", 1);            // for Render/Heroku
+app.use(compression());               // gzip responses
 
-app.set("trust proxy", 1); // Required for secure cookies + IPs on Render/Heroku
-
-// 5.0 Enable Gzip Compression
-app.use(compression());
-
-// 5.1 Assign a unique requestId
+// Request ID + Keep-Alive
 app.use((req, res, next) => {
   req.requestId = uuidv4();
   res.setHeader("X-Request-Id", req.requestId);
-  res.setHeader("Connection", "keep-alive"); // Enable Keep-Alive
+  res.setHeader("Connection", "keep-alive");
   next();
 });
 
-// 5.2 Express-Winston HTTP request logging
+// HTTP request logging
 app.use(
   expressWinston.logger({
     winstonInstance: logger,
@@ -120,21 +131,26 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// 5.3 Serve Static Files with Caching
+// Static files with long caching
 app.use(
   express.static(path.join(__dirname, "public"), {
-    maxAge: "30d", // Cache assets for 30 days
+    maxAge: "30d",
     etag: true,
     immutable: true,
   })
 );
 
-
-// Stricter limiter for sensitive endpoints
+// Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests, please try again later." },
+});
+app.use(globalLimiter);
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: { error: "Too many attempts, slow down." }
+  message: { error: "Too many attempts, slow down." },
 });
 app.use("/api/validate-service", strictLimiter);
 app.use("/save-transaction", strictLimiter);
@@ -142,58 +158,70 @@ app.use("/save-transaction", strictLimiter);
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-// 5.4 Generate CSP nonce
+// CSP Nonce
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
 
-// 5.5 CSRF protection (hardened cookie)
-const csrfProtection = csurf({
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict"
-  }
-});
-app.use(csrfProtection);
+// CSRF Protection
+app.use(
+  csurf({
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    },
+  })
+);
 
-// 5.6 Helmet security headers
-app.use(helmet());                              // defaults: hidePoweredBy, noSniff, xssFilter, frameguard, hsts
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
-    scriptSrc: [
-      "'self'",
-      (req, res) => `'nonce-${res.locals.nonce}'`,
-      "'strict-dynamic'",
-      "https://www.paypal.com",
-      "https://*.paypal.com",
-    ],
-    styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
-    imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
-    frameSrc: [
-      "'self'",
-      "https://www.paypal.com",
-      "https://*.paypal.com",
-      "https://www.sandbox.paypal.com",
-    ],
-    connectSrc: [
-      "'self'",
-      "https://www.paypal.com",
-      "https://*.paypal.com",
-      "https://www.sandbox.paypal.com",
-    ],
-    upgradeInsecureRequests: [],
-  }
-}));
+// Helmet Security Headers
+app.use(helmet());
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
+      scriptSrc: [
+        "'self'",
+        (req, res) => `'nonce-${res.locals.nonce}'`,
+        "'strict-dynamic'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+      ],
+      styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
+      frameSrc: [
+        "'self'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+        "https://www.sandbox.paypal.com",
+      ],
+      connectSrc: [
+        "'self'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+        "https://www.sandbox.paypal.com",
+      ],
+      upgradeInsecureRequests: [],
+    },
+  })
+);
 app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 6. Routes
 // ───────────────────────────────────────────────────────────────────────────────
 
-// Home Route
+// Health Check
+app.get(
+  "/health",
+  wrap(async (req, res) => {
+    await pool.query("SELECT 1"); // throws if DB is down
+    res.json({ status: "ok", pid: process.pid });
+  })
+);
+
+// Home
 app.get(
   "/",
   wrap((req, res) => {
@@ -233,7 +261,7 @@ router.post(
       .trim()
       .notEmpty().withMessage("Service name is required.")
       .isString().withMessage("Service name must be a string.")
-      .escape()
+      .escape(),
   ],
   wrap(async (req, res) => {
     const errors = validationResult(req);
@@ -264,7 +292,7 @@ app.post(
     body("amount").trim().isNumeric().withMessage("Amount must be numeric."),
     body("currency").optional().trim().isLength({ min: 3, max: 3 }).escape(),
     body("payment_status").optional().trim().escape(),
-    body("service_type").optional().trim().escape()
+    body("service_type").optional().trim().escape(),
   ],
   wrap(async (req, res) => {
     const errors = validationResult(req);
@@ -298,23 +326,35 @@ app.post(
       service_type,
     ]);
 
-    transporter.sendMail(
-      {
-        from: process.env.EMAIL_USER,
-        to: payer_email,
-        subject: "Payment Confirmation",
-        text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`,
-      },
-      (err, info) => {
+    // Async, fire‑and‑forget email
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: payer_email,
+      subject: "Payment Confirmation",
+      text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`,
+    };
+    setImmediate(() => {
+      transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
-          logger.error("❌ Error sending confirmation email:", { error: err.message, requestId: req.requestId });
+          logger.error("❌ Error sending confirmation email:", {
+            error: err.message,
+            requestId: req.requestId,
+          });
         } else {
-          logger.info("✅ Confirmation email sent", { info, requestId: req.requestId });
+          logger.info("✅ Confirmation email sent", {
+            info,
+            requestId: req.requestId,
+          });
         }
-      }
-    );
+      });
+    });
 
-    logger.info("✅ Transaction saved", { transaction_id, payer_email, amount, requestId: req.requestId });
+    logger.info("✅ Transaction saved", {
+      transaction_id,
+      payer_email,
+      amount,
+      requestId: req.requestId,
+    });
     res.json({ success: true, message: "Transaction saved", transaction: result.rows[0] });
   })
 );
@@ -351,9 +391,21 @@ app.use((err, req, res, next) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 8. Start Server
+// 8. Start Server & Graceful Shutdown
 // ───────────────────────────────────────────────────────────────────────────────
 const port = process.env.PORT || 5000;
-app.listen(port, "0.0.0.0", () =>
-  logger.info(`✅ Server running on port ${port}`)
+const server = app.listen(port, "0.0.0.0", () =>
+  logger.info(`Worker ${process.pid} listening on port ${port}`)
 );
+
+const shutdown = () => {
+  logger.info(`Worker ${process.pid} shutting down…`);
+  server.close(() => {
+    pool.end(() => {
+      logger.info(`Worker ${process.pid} DB pool closed. Exiting.`);
+      process.exit(0);
+    });
+  });
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
