@@ -40,153 +40,160 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <meta name="csrf-token" content="<%= csrfToken %>" />
-  
-<script nonce="<%= nonce %>">
-  document.addEventListener("DOMContentLoaded", () => {
-    fetchServicePrices();
-    attachBuyButtonHandlers();
-    loadPayPalSDK();
-  });
-
-  let paypalLoaded = false;
-
-  async function fetchServicePrices() {
-    try {
-      const res = await fetch("/api/services");
-      const services = await res.json();
-      services.forEach(s => {
-        const el = document.querySelector(`#price-${s.id}`);
-        if (el) el.textContent = `Price: $${s.price}`;
-      });
-    } catch (err) {
-      console.error("❌ Error fetching service prices:", err);
-    }
-  }
-
-  async function loadPayPalSDK() {
-    try {
-      const res = await fetch("/config/paypal");
-      const { clientId } = await res.json();
-      if (!clientId) throw new Error("Missing PayPal Client ID");
-      const script = document.createElement("script");
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-      script.onload = () => {
-        paypalLoaded = true;
-        console.log("✅ PayPal SDK Loaded");
-      };
-      document.head.appendChild(script);
-    } catch (err) {
-      console.error("❌ Error loading PayPal SDK:", err);
-    }
-  }
-
-  async function validateService(name) {
-    try {
-      const token = document.querySelector('meta[name="csrf-token"]').content;
-      const res = await fetch("/api/validate-service", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": token
-        },
-        body: JSON.stringify({ name })
-      });
-      if (!res.ok) throw new Error("Invalid service selection");
-      return await res.json();
-    } catch (err) {
-      console.error("❌ Error validating service:", err);
-      alert("Invalid service selection. Please refresh.");
-      return null;
-    }
-  }
-
-  function attachBuyButtonHandlers() {
-    document.querySelectorAll(".buy-btn").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const serviceName = btn.dataset.service;
-        const service = await validateService(serviceName);
-        if (!service) return;
-
-        // Hide & clear all other containers
-        document.querySelectorAll(".paypal-button-container").forEach(el => {
-          if (el.id !== `paypal-button-container-${serviceName.toLowerCase().replace(/\s+/g, "")}`) {
-            el.innerHTML = "";
-            el.style.display = "none";
-          }
-        });
-
-        // Show this container
-        const container = btn.closest(".service-card").querySelector(".paypal-button-container");
-        if (!container) return console.warn("⚠️ No PayPal container found");
-        container.style.display = "block";
-        container.innerHTML = "";
-
-        // Render when SDK is ready
-        const tryRender = () => {
-          if (paypalLoaded && window.paypal) {
-            renderPayPalButton(service, container);
-          } else {
-            setTimeout(tryRender, 100);
-          }
-        };
-        tryRender();
-      });
+  <script nonce="<%= nonce %>">
+    document.addEventListener("DOMContentLoaded", () => {
+      fetchServicePrices();
+      attachBuyButtonHandlers();
+      loadPayPalSDK();
     });
-  }
-
-  function renderPayPalButton(service, container) {
-    paypal.Buttons({
-      createOrder(data, actions) {
-        return actions.order.create({
-          purchase_units: [{
-            amount: { currency_code: "USD", value: service.price },
-            description: service.name
-          }]
+  
+    let paypalLoaded = false;
+  
+    async function fetchServicePrices() {
+      try {
+        const response = await fetch("/api/services");
+        const services = await response.json();
+  
+        services.forEach(service => {
+          const priceElement = document.querySelector(`#price-${service.id}`);
+          if (priceElement) {
+            priceElement.textContent = `Price: $${service.price}`;
+          }
         });
-      },
-      onApprove(data, actions) {
-        return actions.order.capture().then(details => {
-          alert("Transaction successful! " + details.payer.name.given_name);
-          const tx = {
-            transaction_id: details.id,
-            payer_name: details.payer.name.given_name,
-            payer_email: details.payer.email_address,
-            amount: service.price,
-            currency: "USD",
-            payment_status: details.status,
-            service_type: service.name
-          };
-          const token = document.querySelector('meta[name="csrf-token"]').content;
-          fetch("/save-transaction", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-csrf-token": token
-            },
-            body: JSON.stringify(tx)
-          })
-          .then(r => r.json())
-          .then(d => {
-            alert(d.success
-              ? "Transaction saved in the database!"
-              : "Transaction successful, but error saving.");
-          })
-          .catch(err => {
-            console.error("❌ Error saving transaction:", err);
-            alert("Error saving transaction. Please contact support.");
-          });
-          container.style.display = "none";
-        });
-      },
-      onError(err) {
-        console.error("❌ PayPal Button Error:", err);
-        alert("Payment error. Please try again.");
+      } catch (error) {
+        console.error("❌ Error fetching service prices:", error);
       }
-    }).render(container);
-  }
-</script>
-
-
+    }
+  
+    async function loadPayPalSDK() {
+      try {
+        const response = await fetch("/config/paypal");
+        const data = await response.json();
+        if (!data.clientId) throw new Error("Missing PayPal Client ID");
+  
+        const script = document.createElement("script");
+        script.src = `https://www.paypal.com/sdk/js?client-id=${data.clientId}&currency=USD`;
+        script.onload = () => {
+          paypalLoaded = true;
+          console.log("✅ PayPal SDK Loaded");
+        };
+        document.head.appendChild(script);
+      } catch (error) {
+        console.error("❌ Error loading PayPal SDK:", error);
+      }
+    }
+  
+    async function validateService(serviceName) {
+      try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
+  
+        const response = await fetch("/api/validate-service", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": csrfToken
+          },
+          body: JSON.stringify({ name: serviceName })
+        });
+  
+        if (!response.ok) throw new Error("Invalid service selection");
+  
+        return await response.json();
+      } catch (error) {
+        console.error("❌ Error validating service:", error);
+        alert("Invalid service selection. Please refresh the page.");
+        return null;
+      }
+    }
+  
+    function attachBuyButtonHandlers() {
+      document.querySelectorAll(".buy-btn").forEach(button => {
+        button.addEventListener("click", async function () {
+          const serviceName = this.getAttribute("data-service");
+          const validService = await validateService(serviceName);
+  
+          if (!validService) return;
+  
+          const serviceCard = this.closest(".service-card");
+          const container = serviceCard.querySelector(".paypal-button-container");
+  
+          if (!container) {
+            console.warn("⚠️ PayPal container not found for this service.");
+            return;
+          }
+  
+          document.querySelectorAll(".paypal-button-container").forEach(el => el.style.display = "none");
+  
+          container.style.display = "block";
+  
+          // Defer rendering until SDK is loaded
+          const interval = setInterval(() => {
+            if (paypalLoaded && window.paypal) {
+              clearInterval(interval);
+              renderPayPalButton(validService, container);
+            }
+          }, 100);
+        });
+      });
+    }
+  
+    function renderPayPalButton(service, container) {
+      container.innerHTML = "";
+  
+      paypal.Buttons({
+        createOrder: function (data, actions) {
+          return actions.order.create({
+            purchase_units: [{
+              amount: { currency_code: "USD", value: service.price },
+              description: service.name
+            }]
+          });
+        },
+        onApprove: function (data, actions) {
+          return actions.order.capture().then(function (details) {
+            alert("Transaction successful! " + details.payer.name.given_name);
+  
+            const transactionData = {
+              transaction_id: details.id,
+              payer_name: details.payer.name.given_name,
+              payer_email: details.payer.email_address,
+              amount: service.price,
+              currency: "USD",
+              payment_status: details.status,
+              service_type: service.name
+            };
+  
+            fetch("/save-transaction", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
+              },
+              body: JSON.stringify(transactionData)
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                alert("Transaction saved in the database!");
+              } else {
+                alert("Transaction successful, but error saving.");
+              }
+            })
+            .catch(err => {
+              console.error("❌ Error saving transaction:", err);
+              alert("Error saving transaction. Please contact support.");
+            });
+  
+            container.style.display = "none";
+          });
+        },
+        onError: function (err) {
+          console.error("❌ PayPal Button Error:", err);
+          alert("Something went wrong with the payment. Please try again.");
+        }
+      }).render(container);
+    }
+  </script>
   
 </head>
 <body>
@@ -691,86 +698,184 @@
   <div class="service-section">
     <div class="container-services">
       <div class="feature-title-wrapper">
+
         <div class="section-title-wrapper">
           <div class="section-title">services</div>
         </div>
-        <div class="service-heading-wrapper" data-w-id="…">
+        <div
+
+          data-w-id="af6919a0-1b9d-fb0b-9e0b-a396716c99b3"
+          class="service-heading-wrapper"
+        
+        >
           <h2 class="service-heading">
-            Professional And <br> Dedicated Consulting <br> Solution
+            Professional And <br> DedicatedConsulting <br> Solution
           </h2>
         </div>
       </div>
 
       <div class="grid">
-        <!-- Basic Service -->
-        <div class="card-services" data-w-id="…">
-          <div class="card-services-number-wrapper">
-            <div class="card-services-number">01</div>
-          </div>
-          <div class="card-services-icon-wrapper">
-            <div class="card-services-icon" style="color: #c1c1c1"></div>
-          </div>
 
-          <div class="service-card" data-name="Basic Service" data-price="2">
-            <h3 class="card-title">Business <br> Administration</h3>
-            <p id="price-1"></p>
-            <p class="card-details">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-            <a class="button button--outline buy-btn" data-service="Basic Service">Pay Now</a>
-            <div
-              class="paypal-button-container"
-              id="paypal-button-container-basic"
-              style="display: none;"
-            ></div>
+
+      <div data-w-id="af6919a0-1b9d-fb0b-9e0b-a396716c99c6" class="card-services">
+        <div class="card-services-number-wrapper">
+      <div class="card-services-number">01</div>
+    </div>
+
+    <div class="card-services-icon-wrapper">
+      <div
+        class="card-services-icon"
+        style="color: rgb(193, 193, 193)"
+      >
+        
+      </div>
+    </div>
+
+    <div class="service-card" data-name="Basic Service" data-price="2">
+
+    <h3 class="card-title">Business <br> Administration</h3>
+    <p id="price-1"></p>
+    <p class="card-details">
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+    </p>
+    <a class="button button--outline buy-btn"data-service="Basic Service"> Pay Now </a>
+    <div class="paypal-button-container" id="paypal-button-container-basic" style="display: none; "></div>
+  </div>
+  
+    </div>
+
+
+<!-- Write your comments here
+<div class="service-card" data-name="Premium Service" data-price="2">
+<h3>Premium Service</h3>
+<p id="price-2">Price: $200</p>
+<button class="buy-btn" data-service="Premium Service">Buy Now</button>
+<div class="paypal-button-container" id="paypal-button-container-premium" style="display: none;"></div>
+</div> 
+
+-->
+
+
+
+    <div
+ 
+    data-w-id="af6919a0-1b9d-fb0b-9e0b-a396716c99c6"
+    class="card-services"
+    
+    >
+    
+           
+    <div class="card-services-number-wrapper">
+    <div class="card-services-number">02</div>
+    </div>
+    <div class="card-services-icon-wrapper">
+    <div
+      class="card-services-icon"
+      style="color: rgb(193, 193, 193)"
+    >
+      
+    </div>
+    </div>
+
+    
+    <div class="service-card" data-name="Premium Service" data-price="2">
+
+      <h3 class="card-title">Auditors & <br> Accountants</h3>
+      <p id="price-2"></p>
+      <p class="card-details">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      </p>
+      <a class="button button--outline buy-btn"data-service="Premium Service"> Pay Now </a>
+      <div class="paypal-button-container" id="paypal-button-container-premium" style="display: none; "></div>
+    </div>
+    
+    </div>
+
+
+    <div data-w-id="af6919a0-1b9d-fb0b-9e0b-a396716c99c6" class="card-services">
+    
+        <div class="card-services-number-wrapper">
+          <div class="card-services-number">03</div>
+        </div>
+        <div class="card-services-icon-wrapper">
+          <div
+            class="card-services-icon"
+            style="color: rgb(193, 193, 193)"
+          >
+            
           </div>
         </div>
 
-        <!-- Premium Service -->
-        <div class="card-services" data-w-id="…">
+
+
+        <div class="service-card" data-name="Enterprise Service" data-price="2">
+          <h3 class="card-title">Tax Returns & <br> Registration</h3>
+          <p id="price-3"></p>
+          <p class="card-details">
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+          </p>
+          <a class="button button--outline buy-btn"data-service="Enterprise Service"> Pay Now </a>
+          <div class="paypal-button-container" id="paypal-button-container-enterprice" style="display: none;"></div>
+        </div>    
+      </div>
+ 
+    
+        <div
+          id="w-node-af6919a0-1b9d-fb0b-9e0b-a396716c99d6-716c99ad"
+          data-w-id="af6919a0-1b9d-fb0b-9e0b-a396716c99d6"
+          class="card-services"
+      
+        >
           <div class="card-services-number-wrapper">
-            <div class="card-services-number">02</div>
+            <div class="card-services-number">
+              04
+              <br />
+            </div>
           </div>
           <div class="card-services-icon-wrapper">
-            <div class="card-services-icon" style="color: #c1c1c1"></div>
+            <div
+              class="card-services-icon"
+              style="color: rgb(193, 193, 193)"
+            >
+              
+            </div>
           </div>
+
 
           <div class="service-card" data-name="Premium Service" data-price="2">
-            <h3 class="card-title">Auditors & <br> Accountants</h3>
-            <p id="price-2"></p>
-            <p class="card-details">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-            <a class="button button--outline buy-btn" data-service="Premium Service">Pay Now</a>
-            <div
-              class="paypal-button-container"
-              id="paypal-button-container-premium"
-              style="display: none;"
-            ></div>
-          </div>
-        </div>
 
-        <!-- Enterprise Service -->
-        <div class="card-services" data-w-id="…">
-          <div class="card-services-number-wrapper">
-            <div class="card-services-number">03</div>
+            <h3 class="card-title">Cash Flow & <br>Financial Projections</h3>
+            <p id="price-4"></p>
+            <p class="card-details">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+            </p>
+            <a class="button button--outline buy-btn"data-service="Premium Service"> Pay Now </a>
+            <div class="paypal-button-container" id="paypal-button-container-premium" style="display: none;"></div>
           </div>
-          <div class="card-services-icon-wrapper">
-            <div class="card-services-icon" style="color: #c1c1c1"></div>
-          </div>
-
-          <div class="service-card" data-name="Enterprise Service" data-price="2">
-            <h3 class="card-title">Tax Returns & <br> Registration</h3>
-            <p id="price-3"></p>
-            <p class="card-details">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-            <a class="button button--outline buy-btn" data-service="Enterprise Service">Pay Now</a>
-            <div
-              class="paypal-button-container"
-              id="paypal-button-container-enterprise"
-              style="display: none;"
-            ></div>
-          </div>
+          
+      
         </div>
+      
+      
+   
+        
+    
+
+
+        
+
+
+
+
+
+        
+
+
       </div>
     </div>
   </div>
 </section>
+
 
 
 
@@ -1624,6 +1729,9 @@ class="contact-left-part-image"
       </div>
   
   </section>
+
+
+
 
 
 
