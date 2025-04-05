@@ -7,6 +7,8 @@ const path = require("path");
 const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
 const winston = require("winston");
+const expressWinston = require("express-winston");
+const { v4: uuidv4 } = require("uuid");
 const crypto = require("crypto");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
@@ -14,38 +16,31 @@ const csurf = require("csurf");
 const nodemailer = require("nodemailer");
 const app = express();
 
-// Configure the Nodemailer transporter (example using Gmail)
-const transporter = nodemailer.createTransport({
-  service: 'Gmail',
-  auth: {
-    user: process.env.EMAIL_USER, // Your email address from .env
-    pass: process.env.EMAIL_PASS  // Your email password or app-specific password
-  }
-});
-
-// Logger setup
+// ───────────────────────────────────────────────────────────────────────────────
+// 1. Winston Logger Setup
+// ───────────────────────────────────────────────────────────────────────────────
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
     winston.format.timestamp({
-      format: () => new Date().toLocaleString('en-US', { timeZone: 'Africa/Johannesburg' })
+      format: () =>
+        new Date().toLocaleString("en-US", { timeZone: "Africa/Johannesburg" }),
     }),
     winston.format.json()
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: "error.log", level: "error" })
-  ]
+    new winston.transports.File({ filename: "error.log", level: "error" }),
+  ],
 });
 
-// PostgreSQL Connection
+// ───────────────────────────────────────────────────────────────────────────────
+// 2. PostgreSQL Connection
+// ───────────────────────────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Required for Render PostgreSQL
-  }
+  ssl: { rejectUnauthorized: false },
 });
-
 pool.connect((err, client, release) => {
   if (err) {
     logger.error("❌ PostgreSQL Connection Error:", { error: err.message });
@@ -56,37 +51,82 @@ pool.connect((err, client, release) => {
   }
 });
 
-// Middleware
+// ───────────────────────────────────────────────────────────────────────────────
+// 3. Nodemailer Transporter
+// ───────────────────────────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+  service: "Gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 4. ApiError Class & Async Wrapper
+// ───────────────────────────────────────────────────────────────────────────────
+class ApiError extends Error {
+  constructor(statusCode, code, message, details = null) {
+    super(message);
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+  }
+}
+const wrap = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 5. Middleware Setup
+// ───────────────────────────────────────────────────────────────────────────────
+// 5.1 Assign a unique requestId
+app.use((req, res, next) => {
+  req.requestId = uuidv4();
+  res.setHeader("X-Request-Id", req.requestId);
+  next();
+});
+
+// 5.2 Express-Winston HTTP request logging
+app.use(
+  expressWinston.logger({
+    winstonInstance: logger,
+    meta: true,
+    msg: "{{req.method}} {{req.url}} {{res.statusCode}} {{res.responseTime}}ms",
+    expressFormat: false,
+    colorize: false,
+    dynamicMeta: (req, res) => ({
+      requestId: req.requestId,
+      userAgent: req.get("User-Agent"),
+    }),
+  })
+);
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
-
-// Cookie parser is required for CSRF protection
 app.use(cookieParser());
 
-// Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: "Too many requests, please try again later."
+  message: "Too many requests, please try again later.",
 });
 app.use(limiter);
 
-// Set View Engine
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-// Generate a nonce for each request and store it in res.locals
+// 5.3 Generate CSP nonce
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
 
-// CSRF protection middleware using cookies
+// 5.4 CSRF protection
 const csrfProtection = csurf({ cookie: true });
 app.use(csrfProtection);
 
-// Use Helmet with a custom Content Security Policy that utilizes the generated nonce
+// 5.5 Helmet CSP
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
@@ -96,7 +136,7 @@ app.use(
         (req, res) => `'nonce-${res.locals.nonce}'`,
         "'strict-dynamic'",
         "https://www.paypal.com",
-        "https://*.paypal.com"
+        "https://*.paypal.com",
       ],
       styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
@@ -104,81 +144,77 @@ app.use(
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com"
+        "https://www.sandbox.paypal.com",
       ],
       connectSrc: [
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com"
+        "https://www.sandbox.paypal.com",
       ],
-      upgradeInsecureRequests: [] // Optional: leave empty if not required
-    }
+      upgradeInsecureRequests: [],
+    },
   })
 );
 
+// ───────────────────────────────────────────────────────────────────────────────
+// 6. Routes
+// ───────────────────────────────────────────────────────────────────────────────
+
 // Home Route
-app.get("/", (req, res) => {
-  // Use the nonce from res.locals and pass the CSRF token to the template
-  res.render("index", { nonce: res.locals.nonce, csrfToken: req.csrfToken() });
-});
+app.get(
+  "/",
+  wrap((req, res) => {
+    res.render("index", { nonce: res.locals.nonce, csrfToken: req.csrfToken() });
+  })
+);
 
-// PayPal Config Route
-app.get("/config/paypal", (req, res) => {
-  if (!process.env.PAYPAL_CLIENT_ID) {
-    logger.error("❌ PayPal Client ID missing");
-    return res.status(500).json({ error: "PayPal Client ID not found" });
-  }
-  res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
-});
+// PayPal Config
+app.get(
+  "/config/paypal",
+  wrap((req, res) => {
+    if (!process.env.PAYPAL_CLIENT_ID) {
+      throw new ApiError(500, "MISSING_PAYPAL_CLIENT_ID", "PayPal Client ID not found");
+    }
+    res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
+  })
+);
 
-// Services API Route (GET /api/services)
-app.get("/api/services", async (req, res) => {
-  try {
-    // Query the database for all services
-    const queryText = "SELECT id, name, price FROM services ORDER BY id ASC";
-    const { rows } = await pool.query(queryText);
+// GET /api/services
+app.get(
+  "/api/services",
+  wrap(async (req, res) => {
+    const { rows } = await pool.query(
+      "SELECT id, name, price FROM services ORDER BY id ASC"
+    );
     res.json(rows);
-  } catch (error) {
-    logger.error("❌ Database error in /api/services", { error: error.message });
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
+  })
+);
 
-
-// Updated API route to return service details securely using PostgreSQL
 const router = express.Router();
 
-// Service Validation Route (POST /api/validate-service)
-router.post("/api/validate-service", async (req, res) => {
-  const { name } = req.body;
-
-  // Validate input
-  if (!name || typeof name !== "string") {
-    return res.status(400).json({ error: "Service name is required and must be a string." });
-  }
-
-  try {
-    // Parameterized query to fetch service by name
-    const queryText = "SELECT name, price FROM services WHERE name = $1 LIMIT 1";
-    const { rows } = await pool.query(queryText, [name]);
-
-    // Check if a service was found
-    if (rows.length === 0) {
-      return res.status(400).json({ error: "Invalid service selection" });
+// POST /api/validate-service
+router.post(
+  "/api/validate-service",
+  wrap(async (req, res) => {
+    const { name } = req.body;
+    if (!name || typeof name !== "string") {
+      throw new ApiError(400, "INVALID_INPUT", "Service name is required and must be a string");
     }
-    
-    // Return the found service details
+    const { rows } = await pool.query(
+      "SELECT name, price FROM services WHERE LOWER(name)=LOWER($1) LIMIT 1",
+      [name]
+    );
+    if (!rows.length) {
+      throw new ApiError(400, "SERVICE_NOT_FOUND", "Invalid service selection");
+    }
     res.json(rows[0]);
-  } catch (error) {
-    logger.error("❌ Database error in validate-service", { error: error.message });
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
+  })
+);
 
 app.use(router);
 
-// Save Transaction Route with CSRF protection and email confirmation
+// POST /save-transaction
 app.post(
   "/save-transaction",
   [
@@ -188,55 +224,99 @@ app.post(
     body("amount").isNumeric().withMessage("Amount must be numeric."),
     body("currency").optional().isLength({ min: 3, max: 3 }),
     body("payment_status").optional().trim(),
-    body("service_type").optional().trim()
+    body("service_type").optional().trim(),
   ],
-  async (req, res) => {
+  wrap(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("⚠️ Validation error", { errors: errors.array() });
-      return res.status(400).json({ success: false, errors: errors.array() });
+      throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", errors.array());
     }
 
-    try {
-      const { transaction_id, payer_name, payer_email, amount, currency, payment_status, service_type } = req.body;
+    const {
+      transaction_id,
+      payer_name,
+      payer_email,
+      amount,
+      currency,
+      payment_status,
+      service_type,
+    } = req.body;
 
-      const query = `INSERT INTO transactions (transaction_id, payer_name, payer_email, amount, currency, payment_status, service_type)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
+    const query = `
+      INSERT INTO transactions
+        (transaction_id, payer_name, payer_email, amount, currency, payment_status, service_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `;
+    const result = await pool.query(query, [
+      transaction_id,
+      payer_name,
+      payer_email,
+      amount,
+      currency,
+      payment_status,
+      service_type,
+    ]);
 
-      const result = await pool.query(query, [transaction_id, payer_name, payer_email, amount, currency, payment_status, service_type]);
-
-      logger.info("✅ Transaction saved", { transaction_id, payer_email, amount });
-
-      // Send a confirmation email
-      const mailOptions = {
+    // Send confirmation email (async but not awaited)
+    transporter.sendMail(
+      {
         from: process.env.EMAIL_USER,
         to: payer_email,
         subject: "Payment Confirmation",
-        text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`
-      };
-
-      transporter.sendMail(mailOptions, (err, info) => {
+        text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`,
+      },
+      (err, info) => {
         if (err) {
-          logger.error("❌ Error sending confirmation email:", { error: err.message });
+          logger.error("❌ Error sending confirmation email:", { error: err.message, requestId: req.requestId });
         } else {
-          logger.info("✅ Confirmation email sent:", { info });
+          logger.info("✅ Confirmation email sent", { info, requestId: req.requestId });
         }
-      });
+      }
+    );
 
-      res.json({ success: true, message: "Transaction saved", transaction: result.rows[0] });
-    } catch (error) {
-      logger.error("❌ Database error", { error: error.message });
-      res.status(500).json({ success: false, error: "Database error" });
-    }
-  }
+    logger.info("✅ Transaction saved", { transaction_id, payer_email, amount, requestId: req.requestId });
+    res.json({ success: true, message: "Transaction saved", transaction: result.rows[0] });
+  })
 );
 
-// Global Error Handler
+// ───────────────────────────────────────────────────────────────────────────────
+// 7. Global Error Handler
+// ───────────────────────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  logger.error("❌ Unhandled Error", { error: err.message });
-  res.status(500).json({ success: false, error: "An unexpected error occurred. / Site Under Maintenance" });
+  // If not an ApiError, wrap it
+  if (!(err instanceof ApiError)) {
+    logger.error("❌ Unhandled Error", {
+      message: err.message,
+      stack: err.stack,
+      requestId: req.requestId,
+    });
+    err = new ApiError(500, "INTERNAL_ERROR", "An unexpected error occurred");
+  }
+
+  // Log the structured error
+  logger.warn("⚠️ API Error Response", {
+    status: err.statusCode,
+    code: err.code,
+    message: err.message,
+    details: err.details,
+    requestId: req.requestId,
+  });
+
+  res.status(err.statusCode).json({
+    success: false,
+    error: {
+      code: err.code,
+      message: err.message,
+      requestId: req.requestId,
+    },
+  });
 });
 
-// Start Server
+// ───────────────────────────────────────────────────────────────────────────────
+// 8. Start Server
+// ───────────────────────────────────────────────────────────────────────────────
 const port = process.env.PORT || 5000;
-app.listen(port, "0.0.0.0", () => logger.info(`✅ Server running on port ${port}`));
+app.listen(port, "0.0.0.0", () =>
+  logger.info(`✅ Server running on port ${port}`)
+);
