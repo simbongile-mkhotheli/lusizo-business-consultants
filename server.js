@@ -174,39 +174,48 @@ app.use(
     },
   })
 );
-
-// Helmet Security Headers
-app.use(helmet());
+// ───────────────────────────────────────────────────────────────────────────────
+// 5.x Helmet Content Security Policy (update scriptSrc)
+// ───────────────────────────────────────────────────────────────────────────────
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
       defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
-      scriptSrc: [
-        "'self'",
-        (req, res) => `'nonce-${res.locals.nonce}'`,
-        "'strict-dynamic'",
-        "https://www.paypal.com",
-        "https://*.paypal.com",
-      ],
+    scriptSrc: [
+       "'self'",
+       (req, res) => `'nonce-${res.locals.nonce}'`,
+       "'strict-dynamic'",
+       "https://www.paypal.com",
+       "https://*.paypal.com"
+     ],
+     scriptSrc: [
+       "'self'",
+       "'unsafe-eval'",                       // ← allow eval() for PayPal & analytics
+       (req, res) => `'nonce-${res.locals.nonce}'`,
+       "'strict-dynamic'",
+       "https://www.paypal.com",
+       "https://*.paypal.com"
+     ],
       styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
       frameSrc: [
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com",
+        "https://www.sandbox.paypal.com"
       ],
       connectSrc: [
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com",
+        "https://www.sandbox.paypal.com"
       ],
-      upgradeInsecureRequests: [],
-    },
+      upgradeInsecureRequests: []
+    }
   })
 );
-app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
+
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 6. Routes
