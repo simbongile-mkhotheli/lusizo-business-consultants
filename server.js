@@ -1,4 +1,8 @@
-require("dotenv").config();
+// ───────────────────────────────────────────────────────────────────────────────
+// 0. Environment Variables (require .env.example to exist with all keys)
+// ───────────────────────────────────────────────────────────────────────────────
+require("dotenv-safe").config();
+
 const express = require("express");
 const { Pool } = require("pg");
 const cors = require("cors");
@@ -106,56 +110,72 @@ app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 app.use(cookieParser());
 
-const limiter = rateLimit({
+// 5.3 Rate Limiting
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: "Too many requests, please try again later.",
+  message: { error: "Too many requests, please try again later." }
 });
-app.use(limiter);
+app.use(globalLimiter);
+
+// Stricter limiter for sensitive endpoints
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Too many attempts, slow down." }
+});
+app.use("/api/validate-service", strictLimiter);
+app.use("/save-transaction", strictLimiter);
 
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-// 5.3 Generate CSP nonce
+// 5.4 Generate CSP nonce
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
 
-// 5.4 CSRF protection
-const csrfProtection = csurf({ cookie: true });
+// 5.5 CSRF protection (hardened cookie)
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict"
+  }
+});
 app.use(csrfProtection);
 
-// 5.5 Helmet CSP
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
-      scriptSrc: [
-        "'self'",
-        (req, res) => `'nonce-${res.locals.nonce}'`,
-        "'strict-dynamic'",
-        "https://www.paypal.com",
-        "https://*.paypal.com",
-      ],
-      styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
-      frameSrc: [
-        "'self'",
-        "https://www.paypal.com",
-        "https://*.paypal.com",
-        "https://www.sandbox.paypal.com",
-      ],
-      connectSrc: [
-        "'self'",
-        "https://www.paypal.com",
-        "https://*.paypal.com",
-        "https://www.sandbox.paypal.com",
-      ],
-      upgradeInsecureRequests: [],
-    },
-  })
-);
+// 5.6 Helmet security headers
+app.use(helmet());                              // defaults: hidePoweredBy, noSniff, xssFilter, frameguard, hsts
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
+    scriptSrc: [
+      "'self'",
+      (req, res) => `'nonce-${res.locals.nonce}'`,
+      "'strict-dynamic'",
+      "https://www.paypal.com",
+      "https://*.paypal.com",
+    ],
+    styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
+    imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
+    frameSrc: [
+      "'self'",
+      "https://www.paypal.com",
+      "https://*.paypal.com",
+      "https://www.sandbox.paypal.com",
+    ],
+    connectSrc: [
+      "'self'",
+      "https://www.paypal.com",
+      "https://*.paypal.com",
+      "https://www.sandbox.paypal.com",
+    ],
+    upgradeInsecureRequests: [],
+  }
+}));
+app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 6. Routes
@@ -196,11 +216,19 @@ const router = express.Router();
 // POST /api/validate-service
 router.post(
   "/api/validate-service",
+  [
+    body("name")
+      .trim()
+      .notEmpty().withMessage("Service name is required.")
+      .isString().withMessage("Service name must be a string.")
+      .escape()
+  ],
   wrap(async (req, res) => {
-    const { name } = req.body;
-    if (!name || typeof name !== "string") {
-      throw new ApiError(400, "INVALID_INPUT", "Service name is required and must be a string");
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ApiError(400, "VALIDATION_ERROR", "Invalid input", errors.array());
     }
+    const { name } = req.body;
     const { rows } = await pool.query(
       "SELECT name, price FROM services WHERE LOWER(name)=LOWER($1) LIMIT 1",
       [name]
@@ -218,13 +246,13 @@ app.use(router);
 app.post(
   "/save-transaction",
   [
-    body("transaction_id").notEmpty().withMessage("Transaction ID is required."),
-    body("payer_name").notEmpty().withMessage("Payer name is required."),
-    body("payer_email").isEmail().withMessage("A valid email is required."),
-    body("amount").isNumeric().withMessage("Amount must be numeric."),
-    body("currency").optional().isLength({ min: 3, max: 3 }),
-    body("payment_status").optional().trim(),
-    body("service_type").optional().trim(),
+    body("transaction_id").trim().notEmpty().withMessage("Transaction ID is required.").escape(),
+    body("payer_name").trim().notEmpty().withMessage("Payer name is required.").escape(),
+    body("payer_email").trim().isEmail().withMessage("A valid email is required.").normalizeEmail(),
+    body("amount").trim().isNumeric().withMessage("Amount must be numeric."),
+    body("currency").optional().trim().isLength({ min: 3, max: 3 }).escape(),
+    body("payment_status").optional().trim().escape(),
+    body("service_type").optional().trim().escape()
   ],
   wrap(async (req, res) => {
     const errors = validationResult(req);
@@ -258,7 +286,6 @@ app.post(
       service_type,
     ]);
 
-    // Send confirmation email (async but not awaited)
     transporter.sendMail(
       {
         from: process.env.EMAIL_USER,
@@ -284,7 +311,6 @@ app.post(
 // 7. Global Error Handler
 // ───────────────────────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  // If not an ApiError, wrap it
   if (!(err instanceof ApiError)) {
     logger.error("❌ Unhandled Error", {
       message: err.message,
@@ -294,7 +320,6 @@ app.use((err, req, res, next) => {
     err = new ApiError(500, "INTERNAL_ERROR", "An unexpected error occurred");
   }
 
-  // Log the structured error
   logger.warn("⚠️ API Error Response", {
     status: err.statusCode,
     code: err.code,
