@@ -345,3 +345,56 @@ const port = process.env.PORT || 5000;
 app.listen(port, "0.0.0.0", () =>
   logger.info(`✅ Server running on port ${port}`)
 );
+
+
+
+const compression = require("compression");
+
+// ...
+
+const app = express();
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 5. Middleware Setup
+// ───────────────────────────────────────────────────────────────────────────────
+
+app.set("trust proxy", 1); // Required for secure cookies + IPs on Render/Heroku
+
+// 5.0 Enable Gzip Compression
+app.use(compression());
+
+// 5.1 Assign a unique requestId
+app.use((req, res, next) => {
+  req.requestId = uuidv4();
+  res.setHeader("X-Request-Id", req.requestId);
+  res.setHeader("Connection", "keep-alive"); // Enable Keep-Alive
+  next();
+});
+
+// 5.2 Express-Winston HTTP request logging
+app.use(
+  expressWinston.logger({
+    winstonInstance: logger,
+    meta: true,
+    msg: "{{req.method}} {{req.url}} {{res.statusCode}} {{res.responseTime}}ms",
+    expressFormat: false,
+    colorize: false,
+    dynamicMeta: (req, res) => ({
+      requestId: req.requestId,
+      userAgent: req.get("User-Agent"),
+    }),
+  })
+);
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use(cookieParser());
+
+// 5.3 Serve Static Files with Caching
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    maxAge: "30d", // Cache assets for 30 days
+    etag: true,
+    immutable: true,
+  })
+);
