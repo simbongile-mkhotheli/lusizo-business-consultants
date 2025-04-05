@@ -20,6 +20,7 @@ const csurf = require("csurf");
 const nodemailer = require("nodemailer");
 const app = express();
 
+
 // ───────────────────────────────────────────────────────────────────────────────
 // 1. Winston Logger Setup
 // ───────────────────────────────────────────────────────────────────────────────
@@ -80,13 +81,23 @@ class ApiError extends Error {
 const wrap = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+const compression = require("compression");
+
+// ...
 // ───────────────────────────────────────────────────────────────────────────────
 // 5. Middleware Setup
 // ───────────────────────────────────────────────────────────────────────────────
+
+app.set("trust proxy", 1); // Required for secure cookies + IPs on Render/Heroku
+
+// 5.0 Enable Gzip Compression
+app.use(compression());
+
 // 5.1 Assign a unique requestId
 app.use((req, res, next) => {
   req.requestId = uuidv4();
   res.setHeader("X-Request-Id", req.requestId);
+  res.setHeader("Connection", "keep-alive"); // Enable Keep-Alive
   next();
 });
 
@@ -107,16 +118,17 @@ app.use(
 
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1d" }));
 app.use(cookieParser());
 
-// 5.3 Rate Limiting
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: "Too many requests, please try again later." }
-});
-app.use(globalLimiter);
+// 5.3 Serve Static Files with Caching
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    maxAge: "30d", // Cache assets for 30 days
+    etag: true,
+    immutable: true,
+  })
+);
+
 
 // Stricter limiter for sensitive endpoints
 const strictLimiter = rateLimit({
