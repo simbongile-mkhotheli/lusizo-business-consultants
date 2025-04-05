@@ -2,7 +2,7 @@
 :root {
     --body-color: black;
     --secondary: white;
-    --primary: orange;
+    --primary: rgb(224, 190, 126);
     --color-100: #c1c1c1;
     --color-200: #212527;
     --color-200-30: #2125274d;
