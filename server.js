@@ -2,10 +2,11 @@
 // 0. Environment & Clustering Setup
 // ───────────────────────────────────────────────────────────────────────────────
 require("dotenv-safe").config();
+
 const cluster = require("cluster");
 const os = require("os");
-
 const numCPUs = os.cpus().length;
+
 if (cluster.isMaster) {
   console.log(`Master ${process.pid} is running — forking ${numCPUs} workers`);
   for (let i = 0; i < numCPUs; i++) {
@@ -19,7 +20,31 @@ if (cluster.isMaster) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 1. Module Imports & Logger Setup
+// 1. Monitoring & Observability Imports
+// ───────────────────────────────────────────────────────────────────────────────
+const Sentry = require("@sentry/node");
+const Tracing = require("@sentry/tracing");
+const client = require("prom-client");
+
+// Initialize Sentry
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+});
+
+// Initialize Prometheus default metrics
+client.collectDefaultMetrics();
+
+// Create a histogram to track HTTP request durations
+const httpRequestDurationMs = new client.Histogram({
+  name: "http_request_duration_ms",
+  help: "Duration of HTTP requests in ms",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [50, 100, 200, 300, 400, 500, 1000],
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 2. Module Imports & Logger Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const express = require("express");
 const compression = require("compression");
@@ -57,7 +82,13 @@ const logger = winston.createLogger({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 2. PostgreSQL Connection
+// 3. Sentry Handlers (must be before other middleware)
+// ───────────────────────────────────────────────────────────────────────────────
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 4. PostgreSQL Connection
 // ───────────────────────────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -74,7 +105,7 @@ pool.connect((err, client, release) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 3. Nodemailer Transporter
+// 5. Nodemailer Transporter
 // ───────────────────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -85,7 +116,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 4. ApiError Class & Async Wrapper
+// 6. ApiError Class & Async Wrapper
 // ───────────────────────────────────────────────────────────────────────────────
 class ApiError extends Error {
   constructor(statusCode, code, message, details = null) {
@@ -99,20 +130,26 @@ const wrap = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 5. Middleware Setup
+// 7. Middleware Setup
 // ───────────────────────────────────────────────────────────────────────────────
-app.set("trust proxy", 1);            // for Render/Heroku
-app.use(compression());               // gzip responses
+app.set("trust proxy", 1);
+app.use(compression());
 
-// Request ID + Keep-Alive
 app.use((req, res, next) => {
   req.requestId = uuidv4();
   res.setHeader("X-Request-Id", req.requestId);
   res.setHeader("Connection", "keep-alive");
+
+  // Start Prometheus timer
+  const end = httpRequestDurationMs.startTimer();
+  res.on("finish", () => {
+    const route = req.route ? req.route.path : req.path;
+    end({ method: req.method, route, status_code: res.statusCode });
+  });
+
   next();
 });
 
-// HTTP request logging
 app.use(
   expressWinston.logger({
     winstonInstance: logger,
@@ -131,7 +168,6 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Static files with long caching
 app.use(
   express.static(path.join(__dirname, "public"), {
     maxAge: "30d",
@@ -140,13 +176,13 @@ app.use(
   })
 );
 
-// Rate Limiting
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: "Too many requests, please try again later." },
 });
 app.use(globalLimiter);
+
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -158,13 +194,11 @@ app.use("/save-transaction", strictLimiter);
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-// CSP Nonce
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
 
-// CSRF Protection
 app.use(
   csurf({
     cookie: {
@@ -174,58 +208,57 @@ app.use(
     },
   })
 );
-// ───────────────────────────────────────────────────────────────────────────────
-// 5.x Helmet Content Security Policy (update scriptSrc)
-// ───────────────────────────────────────────────────────────────────────────────
+
+app.use(helmet());
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
       defaultSrc: ["'self'", "https://www.paypal.com", "https://*.paypal.com"],
-    scriptSrc: [
-       "'self'",
-       (req, res) => `'nonce-${res.locals.nonce}'`,
-       "'strict-dynamic'",
-       "https://www.paypal.com",
-       "https://*.paypal.com"
-     ],
-     scriptSrc: [
-       "'self'",
-       "'unsafe-eval'",                       // ← allow eval() for PayPal & analytics
-       (req, res) => `'nonce-${res.locals.nonce}'`,
-       "'strict-dynamic'",
-       "https://www.paypal.com",
-       "https://*.paypal.com"
-     ],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-eval'",
+        (req, res) => `'nonce-${res.locals.nonce}'`,
+        "'strict-dynamic'",
+        "https://www.paypal.com",
+        "https://*.paypal.com",
+      ],
       styleSrc: ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https://www.paypalobjects.com"],
       frameSrc: [
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com"
+        "https://www.sandbox.paypal.com",
       ],
       connectSrc: [
         "'self'",
         "https://www.paypal.com",
         "https://*.paypal.com",
-        "https://www.sandbox.paypal.com"
+        "https://www.sandbox.paypal.com",
       ],
-      upgradeInsecureRequests: []
-    }
+      upgradeInsecureRequests: [],
+    },
   })
 );
-
-
+app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 6. Routes
+// 8. Metrics Endpoint
+// ───────────────────────────────────────────────────────────────────────────────
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 9. Routes
 // ───────────────────────────────────────────────────────────────────────────────
 
 // Health Check
 app.get(
   "/health",
   wrap(async (req, res) => {
-    await pool.query("SELECT 1"); // throws if DB is down
+    await pool.query("SELECT 1");
     res.json({ status: "ok", pid: process.pid });
   })
 );
@@ -253,9 +286,7 @@ app.get(
 app.get(
   "/api/services",
   wrap(async (req, res) => {
-    const { rows } = await pool.query(
-      "SELECT id, name, price FROM services ORDER BY id ASC"
-    );
+    const { rows } = await pool.query("SELECT id, name, price FROM services ORDER BY id ASC");
     res.json(rows);
   })
 );
@@ -369,8 +400,10 @@ app.post(
 );
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 7. Global Error Handler
+// 10. Sentry & Global Error Handler
 // ───────────────────────────────────────────────────────────────────────────────
+app.use(Sentry.Handlers.errorHandler());
+
 app.use((err, req, res, next) => {
   if (!(err instanceof ApiError)) {
     logger.error("❌ Unhandled Error", {
@@ -400,7 +433,7 @@ app.use((err, req, res, next) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 8. Start Server & Graceful Shutdown
+// 11. Start Server & Graceful Shutdown
 // ───────────────────────────────────────────────────────────────────────────────
 const port = process.env.PORT || 5000;
 const server = app.listen(port, "0.0.0.0", () =>
