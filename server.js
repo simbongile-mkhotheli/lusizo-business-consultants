@@ -18,38 +18,6 @@ if (cluster.isMaster) {
   });
   return; // Master does not run the rest of the server code
 }
-
-// ───────────────────────────────────────────────────────────────────────────────
-// 1. Monitoring & Observability Setup
-// ───────────────────────────────────────────────────────────────────────────────
-const Sentry = require("@sentry/node");
-const Tracing = require("@sentry/tracing");
-const client = require("prom-client");
-
-// Debug: Log Sentry object to verify its structure
-console.log("Sentry object:", Sentry);
-
-// Initialize Sentry before using its handlers
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 1.0,
-});
-
-// Verify that Sentry.Handlers is defined
-if (!Sentry.Handlers) {
-  console.error("Sentry.Handlers is undefined. Check your @sentry/node version.");
-  process.exit(1);
-}
-
-// Initialize Prometheus default metrics and custom HTTP duration histogram
-client.collectDefaultMetrics();
-const httpRequestDurationMs = new client.Histogram({
-  name: "http_request_duration_ms",
-  help: "Duration of HTTP requests in ms",
-  labelNames: ["method", "route", "status_code"],
-  buckets: [50, 100, 200, 300, 400, 500, 1000],
-});
-
 // ───────────────────────────────────────────────────────────────────────────────
 // 2. Module Imports & Logger Setup
 // ───────────────────────────────────────────────────────────────────────────────
@@ -87,6 +55,38 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: "error.log", level: "error" }),
   ],
 });
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 1. Monitoring & Observability Setup
+// ───────────────────────────────────────────────────────────────────────────────
+const Sentry = require("@sentry/node");
+const Tracing = require("@sentry/tracing");
+const client = require("prom-client");
+
+// Debug: Log Sentry object to verify its structure
+console.log("Sentry object:", Sentry);
+
+// Initialize Sentry before using its handlers
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+});
+
+// Verify that Sentry.Handlers is defined
+if (!Sentry.Handlers) {
+  console.error("Sentry.Handlers is undefined. Check your @sentry/node version.");
+  process.exit(1);
+}
+
+// Initialize Prometheus default metrics and custom HTTP duration histogram
+client.collectDefaultMetrics();
+const httpRequestDurationMs = new client.Histogram({
+  name: "http_request_duration_ms",
+  help: "Duration of HTTP requests in ms",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [50, 100, 200, 300, 400, 500, 1000],
+});
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 3. Sentry Handlers (Place Before Other Middleware)
