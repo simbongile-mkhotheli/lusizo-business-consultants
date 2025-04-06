@@ -16,8 +16,7 @@ if (cluster.isMaster) {
     console.warn(`Worker ${worker.process.pid} died, spawning replacement`);
     cluster.fork();
   });
-  // Master does not continue with the server code
-  return;
+  return; // Master does not run the rest of the server code
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -27,11 +26,20 @@ const Sentry = require("@sentry/node");
 const Tracing = require("@sentry/tracing");
 const client = require("prom-client");
 
-// Initialize Sentry before any middleware uses its handlers
+// Debug: Log Sentry object to verify its structure
+console.log("Sentry object:", Sentry);
+
+// Initialize Sentry before using its handlers
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   tracesSampleRate: 1.0,
 });
+
+// Verify that Sentry.Handlers is defined
+if (!Sentry.Handlers) {
+  console.error("Sentry.Handlers is undefined. Check your @sentry/node version.");
+  process.exit(1);
+}
 
 // Initialize Prometheus default metrics and custom HTTP duration histogram
 client.collectDefaultMetrics();
@@ -64,7 +72,7 @@ const nodemailer = require("nodemailer");
 
 const app = express();
 
-// Winston Logger
+// Winston Logger Setup
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
@@ -169,7 +177,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Static assets middleware
+// Serve static assets
 app.use(
   express.static(path.join(__dirname, "public"), {
     maxAge: "30d",
