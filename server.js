@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────────
-// 0. Environment & Clustering Setup
+// 0. Environment Setup and Clustering
 // ───────────────────────────────────────────────────────────────────────────────
 require("dotenv-safe").config();
 
@@ -16,26 +16,25 @@ if (cluster.isMaster) {
     console.warn(`Worker ${worker.process.pid} died, spawning replacement`);
     cluster.fork();
   });
-  return; // Master does not run the rest of the server code
+  // Master does not continue with the server code
+  return;
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 1. Monitoring & Observability Imports
+// 1. Monitoring & Observability Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const Sentry = require("@sentry/node");
 const Tracing = require("@sentry/tracing");
 const client = require("prom-client");
 
-// Initialize Sentry
+// Initialize Sentry before any middleware uses its handlers
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   tracesSampleRate: 1.0,
 });
 
-// Initialize Prometheus default metrics
+// Initialize Prometheus default metrics and custom HTTP duration histogram
 client.collectDefaultMetrics();
-
-// Create a histogram to track HTTP request durations
 const httpRequestDurationMs = new client.Histogram({
   name: "http_request_duration_ms",
   help: "Duration of HTTP requests in ms",
@@ -82,18 +81,19 @@ const logger = winston.createLogger({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 3. Sentry Handlers (must be before other middleware)
+// 3. Sentry Handlers (Place Before Other Middleware)
 // ───────────────────────────────────────────────────────────────────────────────
 app.use(Sentry.Handlers.requestHandler());
 app.use(Sentry.Handlers.tracingHandler());
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 4. PostgreSQL Connection
+// 4. PostgreSQL Connection Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
+
 pool.connect((err, client, release) => {
   if (err) {
     logger.error("❌ PostgreSQL Connection Error:", { error: err.message });
@@ -105,7 +105,7 @@ pool.connect((err, client, release) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 5. Nodemailer Transporter
+// 5. Nodemailer Transporter Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -116,7 +116,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 6. ApiError Class & Async Wrapper
+// 6. Custom Error Class and Async Wrapper
 // ───────────────────────────────────────────────────────────────────────────────
 class ApiError extends Error {
   constructor(statusCode, code, message, details = null) {
@@ -126,6 +126,7 @@ class ApiError extends Error {
     this.details = details;
   }
 }
+
 const wrap = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -135,21 +136,21 @@ const wrap = (fn) => (req, res, next) =>
 app.set("trust proxy", 1);
 app.use(compression());
 
+// Request ID and Prometheus timer middleware
 app.use((req, res, next) => {
   req.requestId = uuidv4();
   res.setHeader("X-Request-Id", req.requestId);
   res.setHeader("Connection", "keep-alive");
 
-  // Start Prometheus timer
   const end = httpRequestDurationMs.startTimer();
   res.on("finish", () => {
     const route = req.route ? req.route.path : req.path;
     end({ method: req.method, route, status_code: res.statusCode });
   });
-
   next();
 });
 
+// Winston request logging middleware
 app.use(
   expressWinston.logger({
     winstonInstance: logger,
@@ -168,6 +169,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(cookieParser());
 
+// Static assets middleware
 app.use(
   express.static(path.join(__dirname, "public"), {
     maxAge: "30d",
@@ -176,6 +178,7 @@ app.use(
   })
 );
 
+// Global and route-specific rate limiting
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -191,14 +194,17 @@ const strictLimiter = rateLimit({
 app.use("/api/validate-service", strictLimiter);
 app.use("/save-transaction", strictLimiter);
 
+// View engine setup
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
+// Inject a nonce for CSP
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");
   next();
 });
 
+// CSRF protection middleware
 app.use(
   csurf({
     cookie: {
@@ -209,6 +215,7 @@ app.use(
   })
 );
 
+// Helmet security middlewares
 app.use(helmet());
 app.use(
   helmet.contentSecurityPolicy({
@@ -243,7 +250,7 @@ app.use(
 app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 8. Metrics Endpoint
+// 8. Metrics Endpoint for Prometheus
 // ───────────────────────────────────────────────────────────────────────────────
 app.get("/metrics", async (req, res) => {
   res.set("Content-Type", client.register.contentType);
@@ -251,10 +258,10 @@ app.get("/metrics", async (req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 9. Routes
+// 9. Route Definitions
 // ───────────────────────────────────────────────────────────────────────────────
 
-// Health Check
+// Health Check Endpoint
 app.get(
   "/health",
   wrap(async (req, res) => {
@@ -263,7 +270,7 @@ app.get(
   })
 );
 
-// Home
+// Home Route
 app.get(
   "/",
   wrap((req, res) => {
@@ -271,7 +278,7 @@ app.get(
   })
 );
 
-// PayPal Config
+// PayPal Config Endpoint
 app.get(
   "/config/paypal",
   wrap((req, res) => {
@@ -282,7 +289,7 @@ app.get(
   })
 );
 
-// GET /api/services
+// GET /api/services Endpoint
 app.get(
   "/api/services",
   wrap(async (req, res) => {
@@ -291,16 +298,18 @@ app.get(
   })
 );
 
+// Router for validating services
 const router = express.Router();
 
-// POST /api/validate-service
 router.post(
   "/api/validate-service",
   [
     body("name")
       .trim()
-      .notEmpty().withMessage("Service name is required.")
-      .isString().withMessage("Service name must be a string.")
+      .notEmpty()
+      .withMessage("Service name is required.")
+      .isString()
+      .withMessage("Service name must be a string.")
       .escape(),
   ],
   wrap(async (req, res) => {
@@ -322,7 +331,7 @@ router.post(
 
 app.use(router);
 
-// POST /save-transaction
+// POST /save-transaction Endpoint
 app.post(
   "/save-transaction",
   [
@@ -366,13 +375,14 @@ app.post(
       service_type,
     ]);
 
-    // Async, fire‑and‑forget email
+    // Async email sending (fire‑and‑forget)
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: payer_email,
       subject: "Payment Confirmation",
       text: `Hello ${payer_name},\n\nYour transaction of $${amount} for ${service_type} was successful.\nTransaction ID: ${transaction_id}\n\nThank you for your business!`,
     };
+
     setImmediate(() => {
       transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
@@ -400,7 +410,7 @@ app.post(
 );
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 10. Sentry & Global Error Handler
+// 10. Sentry Error Handler and Global Error Handler
 // ───────────────────────────────────────────────────────────────────────────────
 app.use(Sentry.Handlers.errorHandler());
 
@@ -449,5 +459,6 @@ const shutdown = () => {
     });
   });
 };
+
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
