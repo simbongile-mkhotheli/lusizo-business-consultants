@@ -285,7 +285,6 @@ app.get(
 
 // Router for validating services
 const router = express.Router();
-
 router.post(
   "/api/validate-service",
   [
@@ -302,19 +301,34 @@ router.post(
     if (!errors.isEmpty()) {
       throw new ApiError(400, "VALIDATION_ERROR", "Invalid input", errors.array());
     }
+
     const { name } = req.body;
+
     const { rows } = await pool.query(
       "SELECT name, price FROM services WHERE LOWER(name)=LOWER($1) LIMIT 1",
       [name]
     );
+
     if (!rows.length) {
       throw new ApiError(400, "SERVICE_NOT_FOUND", "Invalid service selection");
     }
-    res.json(rows[0]);
+
+    const service = rows[0];
+
+    // 💡 Validation logic for price
+    if (service.price < 1000) {
+      throw new ApiError(
+        400,
+        "PRICE_TOO_HIGH",
+        `We accept payments more than R1000: R${service.price}`
+      );
+    }
+
+    // ✅ If everything is good, return the service
+    res.json(service);
   })
 );
 
-app.use(router);
 
 // POST /save-transaction Endpoint
 app.post(
