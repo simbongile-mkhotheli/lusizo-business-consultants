@@ -302,19 +302,33 @@ router.post(
     if (!errors.isEmpty()) {
       throw new ApiError(400, "VALIDATION_ERROR", "Invalid input", errors.array());
     }
+
     const { name } = req.body;
+
     const { rows } = await pool.query(
-      "SELECT name, price FROM services WHERE LOWER(name)=LOWER($1) LIMIT 1",
+      "SELECT name, price FROM services WHERE LOWER(name) = LOWER($1) LIMIT 1",
       [name]
     );
+
     if (!rows.length) {
       throw new ApiError(400, "SERVICE_NOT_FOUND", "Invalid service selection");
     }
-    res.json(rows[0]);
+
+    const service = rows[0];
+
+    // 🔒 Validation: Reject if price < 300
+    if (service.price < 300) {
+      throw new ApiError(
+        400,
+        "PRICE_TOO_LOW",
+        `Service "${service.name}" must have a price of at least 300. Current price is ${service.price}`
+      );
+    }
+
+    res.json(service);
   })
 );
 
-app.use(router);
 
 // POST /save-transaction Endpoint
 app.post(
