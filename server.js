@@ -316,7 +316,7 @@ router.post(
     const service = rows[0];
 
     // 💡 Validation logic for price
-    if (service.price < 1000) {
+    if (service.price < 10) {
       throw new ApiError(
         400,
         "PRICE_TOO_HIGH",
