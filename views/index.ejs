@@ -54,7 +54,7 @@
         services.forEach(service => {
           const priceElement = document.querySelector(`#price-${service.id}`);
           if (priceElement) {
-            priceElement.textContent = `Services Fee: R${service.price}`;
+            priceElement.textContent = `Price: R${service.price}`;
           }
         });
       } catch (error) {
@@ -840,7 +840,7 @@
           <p class="card-details">
             Lorem ipsum dolor sit amet, consectetur adipiscing elit.
           </p>
-          <a class="button button--outline buy-btn"data-service="Enterprise Service"> Pay Now </a>
+          <a class="button button--outline buy-btn" data-service="Enterprise Service"> Pay Now </a>
           <div class="paypal-button-container" id="paypal-button-container-enterprice" style="display: none;"></div>
         </div>    
       </div>
