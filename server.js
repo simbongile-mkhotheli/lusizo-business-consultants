@@ -316,11 +316,11 @@ router.post(
     const service = rows[0];
 
     // 💡 Validation logic for price
-    if (service.price < 10) {
+    if (service.price > 300) {
       throw new ApiError(
         400,
         "PRICE_TOO_HIGH",
-        `We accept payments more than R1000: R${service.price}`
+        `Service price exceeds the allowed limit: R${service.price}`
       );
     }
 
