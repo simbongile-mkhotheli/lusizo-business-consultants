@@ -54,7 +54,7 @@
         services.forEach(service => {
           const priceElement = document.querySelector(`#price-${service.id}`);
           if (priceElement) {
-            priceElement.textContent = `Price: R${service.price}`;
+            priceElement.textContent = `From: R${service.price}`;
           }
         });
       } catch (error) {

@@ -16,13 +16,22 @@ if (cluster.isMaster) {
     console.warn(`Worker ${worker.process.pid} died, spawning replacement`);
     cluster.fork();
   });
-  return; // Master does not run the rest of the server code
+  // Master does not continue with the server code
+  return;
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
 // 1. Monitoring & Observability Setup
 // ───────────────────────────────────────────────────────────────────────────────
+const Sentry = require("@sentry/node");
+const Tracing = require("@sentry/tracing");
 const client = require("prom-client");
+
+// Initialize Sentry before any middleware uses its handlers
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  tracesSampleRate: 1.0,
+});
 
 // Initialize Prometheus default metrics and custom HTTP duration histogram
 client.collectDefaultMetrics();
@@ -55,7 +64,7 @@ const nodemailer = require("nodemailer");
 
 const app = express();
 
-// Winston Logger Setup
+// Winston Logger
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
@@ -72,7 +81,13 @@ const logger = winston.createLogger({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 3. PostgreSQL Connection Setup
+// 3. Sentry Handlers (Place Before Other Middleware)
+// ───────────────────────────────────────────────────────────────────────────────
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
+// ───────────────────────────────────────────────────────────────────────────────
+// 4. PostgreSQL Connection Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -90,7 +105,7 @@ pool.connect((err, client, release) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 4. Nodemailer Transporter Setup
+// 5. Nodemailer Transporter Setup
 // ───────────────────────────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -101,7 +116,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 5. Custom Error Class and Async Wrapper
+// 6. Custom Error Class and Async Wrapper
 // ───────────────────────────────────────────────────────────────────────────────
 class ApiError extends Error {
   constructor(statusCode, code, message, details = null) {
@@ -116,7 +131,7 @@ const wrap = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 6. Middleware Setup
+// 7. Middleware Setup
 // ───────────────────────────────────────────────────────────────────────────────
 app.set("trust proxy", 1);
 app.use(compression());
@@ -154,7 +169,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Serve static assets
+// Static assets middleware
 app.use(
   express.static(path.join(__dirname, "public"), {
     maxAge: "30d",
@@ -235,7 +250,7 @@ app.use(
 app.use(helmet.referrerPolicy({ policy: "no-referrer" }));
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 7. Metrics Endpoint for Prometheus
+// 8. Metrics Endpoint for Prometheus
 // ───────────────────────────────────────────────────────────────────────────────
 app.get("/metrics", async (req, res) => {
   res.set("Content-Type", client.register.contentType);
@@ -243,7 +258,7 @@ app.get("/metrics", async (req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 8. Route Definitions
+// 9. Route Definitions
 // ───────────────────────────────────────────────────────────────────────────────
 
 // Health Check Endpoint
@@ -395,8 +410,10 @@ app.post(
 );
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 9. Global Error Handler
+// 10. Sentry Error Handler and Global Error Handler
 // ───────────────────────────────────────────────────────────────────────────────
+app.use(Sentry.Handlers.errorHandler());
+
 app.use((err, req, res, next) => {
   if (!(err instanceof ApiError)) {
     logger.error("❌ Unhandled Error", {
@@ -426,7 +443,7 @@ app.use((err, req, res, next) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// 10. Start Server & Graceful Shutdown
+// 11. Start Server & Graceful Shutdown
 // ───────────────────────────────────────────────────────────────────────────────
 const port = process.env.PORT || 5000;
 const server = app.listen(port, "0.0.0.0", () =>
