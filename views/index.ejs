@@ -50,7 +50,7 @@
       if (!clientId) throw new Error("Missing PayPal Client ID");
 
       const s = document.createElement("script");
-      s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+      s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=ZAR`;
       s.onload = () => { paypalLoaded = true; };
       document.head.appendChild(s);
     } catch (e) {
@@ -126,7 +126,7 @@
       createOrder: (_, actions) =>
         actions.order.create({
           purchase_units: [{
-            amount: { currency_code: "USD", value: service.price },
+            amount: { currency_code: "ZAR", value: service.price },
             description: service.name
           }]
         }),
@@ -147,7 +147,7 @@
       payer_name: details.payer.name.given_name,
       payer_email: details.payer.email_address,
       amount: service.price,
-      currency: "USD",
+      currency: "ZAR",
       payment_status: details.status,
       service_type: service.name
     };
