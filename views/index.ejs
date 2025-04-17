@@ -25,6 +25,18 @@
     });
   </script>
 
+<script nonce="<%= nonce %>">
+  document.addEventListener("DOMContentLoaded", () => {
+    const toggleBtn = document.getElementById("show-custom-card");
+    const customCard = document.getElementById("custom-card");
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.preventDefault(); // prevent link jump
+      customCard.style.display = "block";
+      toggleBtn.style.display = "none"; // Optional: hide the button after showing
+    });
+  });
+</script>
 
 
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -379,9 +391,26 @@
               <span class="button--primary-text">Get Started</span>
               <span class="button--icon"></span>
             </a>
-            <a href="#" class="button button--outline">
-              <span class="button--outline-text">Pay Online</span>
-            </a>
+       <a href="#" class="button button--outline" id="show-custom-card">
+  <span class="button--outline-text">Pay Online</span>
+</a>
+
+<div class="service-card custom" id="custom-card">
+  <h3>Custom Amount</h3>
+  <input
+    type="number"
+    id="custom-amount"
+    placeholder="Enter amount"
+    min="0.01"
+    step="0.01"
+  />
+  <button class="buy-btn" data-service="custom">Pay Custom</button>
+  <div class="paypal-button-container" style="display: none;"></div>
+</div>
+
+
+
+
           </div>
         </div>
         <div class="hero-right-grid">
@@ -685,18 +714,7 @@
         </div>
       </div>
       
-      <div class="service-card" id="custom-card">
-  <h3>Custom Amount</h3>
-  <input
-    type="number"
-    id="custom-amount"
-    placeholder="Enter amount"
-    min="0.01"
-    step="0.01"
-  />
-  <button class="buy-btn" data-service="custom">Pay Custom</button>
-  <div class="paypal-button-container" style="display: none;"></div>
-</div>
+
 
 
       <div class="grid">

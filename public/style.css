@@ -363,6 +363,12 @@
   
   
   /*** Hero Section ***/
+
+
+  #custom-card {
+  display: none;
+}
+
   
   .grid-hero {
     display: grid;
