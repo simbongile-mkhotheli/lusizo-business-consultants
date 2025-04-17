@@ -331,6 +331,26 @@ router.post(
 
 
 // POST /save-transaction Endpoint
+router.post("/api/validate-custom",
+  [ body("amount").isFloat({ gt: 0 }).withMessage("Amount must be > 0") ],
+  wrap(async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ApiError(400, "VALIDATION_ERROR", errors.array()[0].msg);
+    }
+
+    const { amount } = req.body;
+    // e.g. enforce a minimum of R 50
+    if (amount < 50) {
+      throw new ApiError(400, "AMOUNT_TOO_LOW",
+        `Custom payments must be at least R 50. You entered R ${amount.toFixed(2)}`);
+    }
+
+    // send back the *approved* amount:
+    res.json({ amount: amount.toFixed(2) });
+  })
+);
+
 app.post(
   "/save-transaction",
   [

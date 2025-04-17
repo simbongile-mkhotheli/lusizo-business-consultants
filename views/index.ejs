@@ -27,189 +27,145 @@
 
 
 
-
-
-
-
-
-
-
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <meta name="csrf-token" content="<%= csrfToken %>" />
+
+  
+
+
+
+
   <script nonce="<%= nonce %>">
-    document.addEventListener("DOMContentLoaded", () => {
-      fetchServicePrices();
-      attachBuyButtonHandlers();
-      loadPayPalSDK();
-    });
-  
-    let paypalLoaded = false;
-  
-    async function fetchServicePrices() {
-      try {
-        const response = await fetch("/api/services");
-        const services = await response.json();
-  
-        services.forEach(service => {
-          const priceElement = document.querySelector(`#price-${service.id}`);
-          if (priceElement) {
-          //  priceElement.textContent = `From: R${service.price}`;
-          }
-        });
-      } catch (error) {
-        console.error("❌ Error fetching service prices:", error);
-      }
-    }
-  
-    async function loadPayPalSDK() {
-      try {
-        const response = await fetch("/config/paypal");
-        const data = await response.json();
-        if (!data.clientId) throw new Error("Missing PayPal Client ID");
-  
-        const script = document.createElement("script");
-        script.src = `https://www.paypal.com/sdk/js?client-id=${data.clientId}&currency=USD`;
-        
-        script.onload = () => {
-          paypalLoaded = true;
-          console.log("✅ PayPal SDK Loaded");
-        };
-        document.head.appendChild(script);
-      } catch (error) {
-        console.error("❌ Error loading PayPal SDK:", error);
-      }
-    }
-  
-    async function validateService(serviceName) {
-      try {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute("content");
-  
-        const response = await fetch("/api/validate-service", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrfToken
-          },
-          body: JSON.stringify({ name: serviceName })
-        });
-  
-        if (!response.ok) throw new Error("Invalid service selection");
-  
-        return await response.json();
-      } catch (error) {
-        console.error("❌ Error validating service:", error);
-        alert("Invalid service selection. Please refresh the page.");
-        return null;
-      }
-    }
-  
-   function attachBuyButtonHandlers() {
-  document.querySelectorAll(".buy-btn").forEach(button => {
-    button.addEventListener("click", async function () {
-      const serviceName = this.getAttribute("data-service");
-      let service;
-
-      if (serviceName === "custom") {
-        // ── Read & validate the custom‑amount input ─────────
-        const raw = document.getElementById("custom-amount").value;
-        const num = parseFloat(raw);
-        if (isNaN(num) || num <= 0) {
-          return alert("Please enter a valid amount greater than zero.");
-        }
-        service = {
-          id: "custom",
-          name: "Custom Payment",
-          price: num.toFixed(2)
-        };
-      } else {
-        // ── Your existing validation for named services ───────
-        const valid = await validateService(serviceName);
-        if (!valid) return;
-        service = valid;
-      }
-
-      // ── Find the correct PayPal button container ───────────
-      const serviceCard = this.closest(".service-card");
-      const container = serviceCard.querySelector(".paypal-button-container");
-      if (!container) {
-        console.warn("⚠️ No PayPal container for this card.");
-        return;
-      }
-
-      // ── Hide any others, show this one ────────────────────
-      document.querySelectorAll(".paypal-button-container")
-        .forEach(el => el.style.display = "none");
-      container.style.display = "block";
-
-      // ── Wait for the SDK, then render ─────────────────────
-      const waiter = setInterval(() => {
-        if (paypalLoaded && window.paypal) {
-          clearInterval(waiter);
-          renderPayPalButton(service, container);
-        }
-      }, 100);
-    });
+  document.addEventListener("DOMContentLoaded", () => {
+    attachBuyButtonHandlers();
+    loadPayPalSDK();
   });
-}
 
-function renderPayPalButton(service, container) {
-  container.innerHTML = "";  // clear old buttons
-  paypal.Buttons({
-    createOrder: (data, actions) =>
-      actions.order.create({
-        purchase_units: [{
-          amount: { currency_code: "USD", value: service.price },
-          description: service.name
-        }]
-      }),
+  let paypalLoaded = false;
 
-    onApprove: (data, actions) =>
-      actions.order.capture().then(details => {
-        alert(`Thank you, ${details.payer.name.given_name}!`);
+  async function loadPayPalSDK() {
+    try {
+      const { clientId } = await fetch("/config/paypal").then(r => r.json());
+      if (!clientId) throw new Error("Missing PayPal Client ID");
 
-        // …your existing save-transaction logic…
-        const txn = {
-          transaction_id: details.id,
-          payer_name: details.payer.name.given_name,
-          payer_email: details.payer.email_address,
-          amount: service.price,
-          currency: "USD",
-          payment_status: details.status,
-          service_type: service.name
-        };
-        return fetch("/save-transaction", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
-          },
-          body: JSON.stringify(txn)
-        })
-        .then(res => res.json())
-        .then(res => {
-          if (res.success) {
-            alert("Saved to database!");
-          } else {
-            alert("Paid but could not save—contact support.");
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          alert("Payment went through, but error saving transaction.");
-        })
-        .finally(() => container.style.display = "none");
-      }),
-
-    onError: err => {
-      console.error("PayPal error:", err);
-      alert("Something went wrong. Please try again.");
+      const s = document.createElement("script");
+      s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=ZAR`;
+      s.onload = () => { paypalLoaded = true; };
+      document.head.appendChild(s);
+    } catch (e) {
+      console.error("❌ Error loading PayPal SDK:", e);
     }
-  }).render(container);
-}
+  }
 
-  </script>
-  
+  function attachBuyButtonHandlers() {
+    document.querySelectorAll(".buy-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const svc = btn.dataset.service;
+        let payload;
+
+        if (svc === "custom") {
+          // 1) grab & basic‐validate
+          const raw = document.getElementById("custom-amount").value;
+          const amt = parseFloat(raw);
+          if (isNaN(amt) || amt <= 0) {
+            return alert("Enter a valid amount above zero.");
+          }
+          // 2) server‐side verify‐amount endpoint:
+          const resp = await fetch("/api/validate-custom", {
+            method: "POST",
+            headers: {
+              "Content-Type":"application/json",
+              "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ amount: amt })
+          });
+          if (!resp.ok) {
+            const err = await resp.json();
+            return alert(err.error?.message || "Invalid amount");
+          }
+          payload = { name: "Custom Payment", price: (await resp.json()).amount };
+        } else {
+          // fixed‐price service validation
+          const resp = await fetch("/api/validate-service", {
+            method: "POST",
+            headers: {
+              "Content-Type":"application/json",
+              "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ name: svc })
+          });
+          if (!resp.ok) {
+            const err = await resp.json();
+            return alert(err.error?.message || "Invalid service");
+          }
+          payload = await resp.json(); 
+        }
+
+        // find & show this card’s PayPal container
+        const card = btn.closest(".service-card");
+        const cont = card.querySelector(".paypal-button-container");
+        document.querySelectorAll(".paypal-button-container")
+                .forEach(el => el.style.display = "none");
+        cont.style.display = "block";
+
+        // wait for SDK…
+        const waitFor = setInterval(() => {
+          if (paypalLoaded && window.paypal) {
+            clearInterval(waitFor);
+            renderPayPalButton(payload, cont);
+          }
+        }, 100);
+      });
+    });
+  }
+
+  function renderPayPalButton(service, container) {
+    container.innerHTML = "";
+    paypal.Buttons({
+      createOrder: (_, actions) =>
+        actions.order.create({
+          purchase_units: [{
+            amount: { currency_code: "ZAR", value: service.price },
+            description: service.name
+          }]
+        }),
+      onApprove: (_, actions) =>
+        actions.order.capture().then(details =>
+          saveTransaction(details, service, container)
+        ),
+      onError: err => {
+        console.error("PayPal error:", err);
+        alert("Payment error—please try again.");
+      }
+    }).render(container);
+  }
+
+  function saveTransaction(details, service, container) {
+    const txn = {
+      transaction_id: details.id,
+      payer_name: details.payer.name.given_name,
+      payer_email: details.payer.email_address,
+      amount: service.price,
+      currency: "ZAR",
+      payment_status: details.status,
+      service_type: service.name
+    };
+    return fetch("/save-transaction", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+      },
+      body: JSON.stringify(txn)
+    })
+    .then(r => r.json())
+    .then(r => alert(r.success ? "Saved!" : "Paid but not saved—contact support."))
+    .catch(e => { console.error(e); alert("Saved error."); })
+    .finally(() => container.style.display = "none");
+  }
+</script>
+
 </head>
 <body>
 
