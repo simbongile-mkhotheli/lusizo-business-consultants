@@ -104,93 +104,110 @@
       }
     }
   
-    function attachBuyButtonHandlers() {
-      document.querySelectorAll(".buy-btn").forEach(button => {
-        button.addEventListener("click", async function () {
-          const serviceName = this.getAttribute("data-service");
-          const validService = await validateService(serviceName);
-  
-          if (!validService) return;
-  
-          const serviceCard = this.closest(".service-card");
-          const container = serviceCard.querySelector(".paypal-button-container");
-  
-          if (!container) {
-            console.warn("⚠️ PayPal container not found for this service.");
-            return;
-          }
-  
-          document.querySelectorAll(".paypal-button-container").forEach(el => el.style.display = "none");
-  
-          container.style.display = "block";
-  
-          // Defer rendering until SDK is loaded
-          const interval = setInterval(() => {
-            if (paypalLoaded && window.paypal) {
-              clearInterval(interval);
-              renderPayPalButton(validService, container);
-            }
-          }, 100);
-        });
-      });
-    }
-  
-    function renderPayPalButton(service, container) {
-      container.innerHTML = "";
-  
-      paypal.Buttons({
-        createOrder: function (data, actions) {
-          return actions.order.create({
-            purchase_units: [{
-              amount: { currency_code: "USD", value: service.price },
-              description: service.name
-            }]
-          });
-        },
-        onApprove: function (data, actions) {
-          return actions.order.capture().then(function (details) {
-            alert("Transaction successful! " + details.payer.name.given_name);
-  
-            const transactionData = {
-              transaction_id: details.id,
-              payer_name: details.payer.name.given_name,
-              payer_email: details.payer.email_address,
-              amount: service.price,
-              currency: "USD",
-              payment_status: details.status,
-              service_type: service.name
-            };
-  
-            fetch("/save-transaction", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-csrf-token": document.querySelector('meta[name="csrf-token"]').getAttribute("content")
-              },
-              body: JSON.stringify(transactionData)
-            })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                alert("Transaction saved in the database!");
-              } else {
-                alert("Transaction successful, but error saving.");
-              }
-            })
-            .catch(err => {
-              console.error("❌ Error saving transaction:", err);
-              alert("Error saving transaction. Please contact support.");
-            });
-  
-            container.style.display = "none";
-          });
-        },
-        onError: function (err) {
-          console.error("❌ PayPal Button Error:", err);
-          alert("Something went wrong with the payment. Please try again.");
+   function attachBuyButtonHandlers() {
+  document.querySelectorAll(".buy-btn").forEach(button => {
+    button.addEventListener("click", async function () {
+      const serviceName = this.getAttribute("data-service");
+      let service;
+
+      if (serviceName === "custom") {
+        // ── Read & validate the custom‑amount input ─────────
+        const raw = document.getElementById("custom-amount").value;
+        const num = parseFloat(raw);
+        if (isNaN(num) || num <= 0) {
+          return alert("Please enter a valid amount greater than zero.");
         }
-      }).render(container);
+        service = {
+          id: "custom",
+          name: "Custom Payment",
+          price: num.toFixed(2)
+        };
+      } else {
+        // ── Your existing validation for named services ───────
+        const valid = await validateService(serviceName);
+        if (!valid) return;
+        service = valid;
+      }
+
+      // ── Find the correct PayPal button container ───────────
+      const serviceCard = this.closest(".service-card");
+      const container = serviceCard.querySelector(".paypal-button-container");
+      if (!container) {
+        console.warn("⚠️ No PayPal container for this card.");
+        return;
+      }
+
+      // ── Hide any others, show this one ────────────────────
+      document.querySelectorAll(".paypal-button-container")
+        .forEach(el => el.style.display = "none");
+      container.style.display = "block";
+
+      // ── Wait for the SDK, then render ─────────────────────
+      const waiter = setInterval(() => {
+        if (paypalLoaded && window.paypal) {
+          clearInterval(waiter);
+          renderPayPalButton(service, container);
+        }
+      }, 100);
+    });
+  });
+}
+
+function renderPayPalButton(service, container) {
+  container.innerHTML = "";  // clear old buttons
+  paypal.Buttons({
+    createOrder: (data, actions) =>
+      actions.order.create({
+        purchase_units: [{
+          amount: { currency_code: "USD", value: service.price },
+          description: service.name
+        }]
+      }),
+
+    onApprove: (data, actions) =>
+      actions.order.capture().then(details => {
+        alert(`Thank you, ${details.payer.name.given_name}!`);
+
+        // …your existing save-transaction logic…
+        const txn = {
+          transaction_id: details.id,
+          payer_name: details.payer.name.given_name,
+          payer_email: details.payer.email_address,
+          amount: service.price,
+          currency: "USD",
+          payment_status: details.status,
+          service_type: service.name
+        };
+        return fetch("/save-transaction", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify(txn)
+        })
+        .then(res => res.json())
+        .then(res => {
+          if (res.success) {
+            alert("Saved to database!");
+          } else {
+            alert("Paid but could not save—contact support.");
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Payment went through, but error saving transaction.");
+        })
+        .finally(() => container.style.display = "none");
+      }),
+
+    onError: err => {
+      console.error("PayPal error:", err);
+      alert("Something went wrong. Please try again.");
     }
+  }).render(container);
+}
+
   </script>
   
 </head>
@@ -711,6 +728,19 @@
           </h2>
         </div>
       </div>
+      <div class="service-card" id="custom-card">
+  <h3>Custom Amount</h3>
+  <input
+    type="number"
+    id="custom-amount"
+    placeholder="Enter amount"
+    min="0.01"
+    step="0.01"
+  />
+  <button class="buy-btn" data-service="custom">Pay Custom</button>
+  <div class="paypal-button-container" style="display: none;"></div>
+</div>
+
 
       <div class="grid">
 
