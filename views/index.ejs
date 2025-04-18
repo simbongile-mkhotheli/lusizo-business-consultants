@@ -405,22 +405,13 @@
             </a>
 
 
-<!-- Payment Button -->
-<a href="#" id="open-payment-modal" class="button button--outline">
+            
+<!-- Your “Pay Online” trigger -->
+<a href="#" id="pay-online-btn" class="button button--outline">
   <span class="button--outline-text">Pay Online</span>
 </a>
 
-<!-- Payment Modal -->
-<div id="payment-modal" class="modal hidden">
-  <div class="modal-backdrop"></div>
-  <div class="modal-content">
-    <button class="modal-close">&times;</button>
-    <h2>Custom Payment</h2>
-    <input type="number" id="custom-amount" placeholder="Enter amount" min="1" />
-    <button class="buy-btn">Pay Custom</button>
-    <div class="paypal-button-container" style="margin-top: 1rem;"></div>
-  </div>
-</div>
+
 
 <!-- Your existing script tag already has a nonce -->
 <script nonce="<%= nonce %>">
