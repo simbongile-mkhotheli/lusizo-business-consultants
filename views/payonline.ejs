@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Pay Online · Lusizo Business Consultants</title>
-  <meta name="description" content="Securely pay invoices online for Lusizo Business Consultants.">
+  <title>Pay Online</title>
+  <meta name="csrf-token" content="<%= csrfToken %>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- External CSS (you can extract this to payment.css) -->
+  <!-- Modern CSS for payment page -->
   <style>
     :root {
       --clr-primary:    #3b82f6;
@@ -20,7 +20,7 @@
       --transition:     0.3s ease;
     }
 
-    *, *::before, *::after {
+    * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -52,12 +52,13 @@
       transform: translateY(-4px);
     }
 
-    header.payment-header {
+    .payment-header {
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    header.payment-header img {
-      max-width: 150px;
+    .payment-header h1 {
+      font-size: 1.75rem;
+      color: var(--clr-secondary);
     }
 
     .service-card {
@@ -65,28 +66,24 @@
       row-gap: 1rem;
     }
 
-    .service-card label {
-      font-weight: 500;
+    .service-card h3 {
+      font-size: 1.25rem;
       color: var(--clr-secondary);
     }
 
-    .service-card input {
+    .service-card input[type="number"] {
       width: 100%;
       padding: 0.75rem;
       border: 1px solid var(--clr-border);
       border-radius: var(--radius);
       transition: border-color var(--transition);
-      text-align: right;
     }
-    .service-card input:focus {
+    .service-card input[type="number"]:focus {
       outline: none;
       border-color: var(--clr-primary);
     }
 
     .buy-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
       background: var(--clr-primary);
       color: #fff;
       border: none;
@@ -96,52 +93,28 @@
       cursor: pointer;
       transition: background var(--transition);
     }
-    .buy-btn:hover:not(:disabled) {
+    .buy-btn:hover {
       background: #2563eb;
     }
-    .buy-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
 
-    .spinner {
-      width: 1rem;
-      height: 1rem;
-      margin-left: 0.5rem;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-
-    #feedback {
-      margin-top: 1rem;
-      padding: 0.75rem;
-      border-radius: var(--radius);
-      font-size: 0.95rem;
-      display: none;
-    }
-    #feedback.success { background: #d1fae5; color: #065f46; display: block; }
-    #feedback.error   { background: #fee2e2; color: #991b1b; display: block; }
-
-    .trust-badges {
-      display: flex;
-      justify-content: center;
-      gap: 0.5rem;
+    .paypal-button-container {
       margin-top: 1rem;
     }
-    .trust-badges img {
-      width: 40px;
-      opacity: 0.8;
-      transition: opacity var(--transition);
-    }
-    .trust-badges img:hover { opacity: 1; }
 
     @media (max-width: 480px) {
-      .payment-container { padding: 1rem; }
+      .payment-container {
+        padding: 1rem;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="payment-container">
+
+
+
+
+
+ <div class="payment-container">
     <header class="payment-header">
       <!-- Replace with your logo -->
       <img src="/assets/logo.png" alt="Lusizo Business Consultants">
@@ -177,70 +150,12 @@
     </main>
   </div>
 
-  <!-- PayPal SDK (deferred) -->
-  <script defer src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID&currency=USD"></script>
-  <!-- Your custom logic -->
-  <script defer>
-    document.addEventListener('DOMContentLoaded', () => {
-      const amtInput = document.getElementById('custom-amount');
-      const payBtn   = document.getElementById('pay-btn');
-      const btnText  = document.getElementById('btn-text');
-      const spinner  = document.getElementById('btn-spinner');
-      const feedback = document.getElementById('feedback');
 
-      const formatter = new Intl.NumberFormat('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      });
 
-      // Format input and toggle button
-      amtInput.addEventListener('input', e => {
-        let raw = e.target.value.replace(/[^0-9.]/g, '');
-        const num = parseFloat(raw);
-        if (!isNaN(num)) {
-          e.target.value = formatter.format(num);
-        } else {
-          e.target.value = raw;
-        }
-        // enable only if valid
-        payBtn.disabled = isNaN(num) || num < 0.01;
-      });
 
-      // Show feedback messages
-      function showFeedback(type, msg) {
-        feedback.className = type;
-        feedback.textContent = msg;
-      }
 
-      // Initialize PayPal Buttons
-      paypal.Buttons({
-        style: { layout: 'vertical', color: 'blue', shape: 'pill', label: 'pay' },
-        funding: { disallowed: [ paypal.FUNDING.CREDIT ] },
-        createOrder: (data, actions) => {
-          const raw = amtInput.value.replace(/,/g, '');
-          const value = parseFloat(raw).toFixed(2);
-          return actions.order.create({ purchase_units: [{ amount: { value } }] });
-        },
-        onClick: () => {
-          // disable UI and show spinner
-          payBtn.disabled = true;
-          btnText.textContent = 'Processing…';
-          spinner.hidden = false;
-          feedback.textContent = '';
-        },
-        onApprove: (data, actions) =>
-          actions.order.capture().then(details => {
-            showFeedback('success', `Payment of $${details.purchase_units[0].amount.value} successful!`);
-          }),
-        onError: err => {
-          payBtn.disabled = false;
-          btnText.textContent = 'Pay Now';
-          spinner.hidden = true;
-          showFeedback('error', 'Oops, something went wrong. Please try again.');
-          console.error(err);
-        }
-      }).render('.paypal-button-container');
-    });
-  </script>
+
+  <!-- PayPal logic (same paypal.js or inline) -->
+  <script nonce="<%= nonce %>" src="/js/paypal.js"></script>
 </body>
 </html>
