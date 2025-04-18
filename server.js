@@ -183,6 +183,7 @@ app.use("/save-transaction", strictLimiter);
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
+
 // Inject a nonce for CSP
 app.use((req, res, next) => {
   res.locals.nonce = crypto.randomBytes(16).toString("base64");

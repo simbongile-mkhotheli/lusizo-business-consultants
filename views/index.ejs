@@ -407,9 +407,17 @@
   <span class="button--outline-text">Pay Online</span>
 </a>
 
-<button onclick="window.location.href='/payonline'">
-  Pay Online
-</button>
+<!-- Give the button an ID or class -->
+<button id="pay-online-btn">Pay Online</button>
+
+<!-- Your existing script tag already has a nonce -->
+<script nonce="<%= nonce %>">
+  document.getElementById("pay-online-btn")
+    .addEventListener("click", () => {
+      window.location.href = "/payonline";
+    });
+</script>
+
 
 
           </div>
