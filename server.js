@@ -431,7 +431,17 @@ app.post(
 // Mount our API routes
 // ───────────────────────────────────────────────────────────────────────────────
 app.use(router);
-
+// After your PayPal config and before other routes
+app.get(
+  "/payonline",
+  wrap((req, res) => {
+    // Render the new Pay Online page
+    res.render("payonline", {
+      nonce: res.locals.nonce,
+      csrfToken: req.csrfToken()
+    });
+  })
+);
 // ───────────────────────────────────────────────────────────────────────────────
 // 9. Global Error Handler
 // ───────────────────────────────────────────────────────────────────────────────

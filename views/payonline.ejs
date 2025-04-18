@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= csrfToken %>" />
+  <script nonce="<%= nonce %>"></script>
+  <title>Pay Online</title>
+  <style>
+    .paypal-button-container { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Pay Online</h1>
+
+  <!-- Custom amount card -->
+  <div class="service-card custom" id="custom-card">
+    <h3>Custom Amount</h3>
+    <input
+      type="number"
+      id="custom-amount"
+      placeholder="Enter amount"
+      min="0.01"
+      step="0.01"
+    />
+    <button class="buy-btn" data-service="custom">Pay Custom</button>
+    <div class="paypal-button-container"></div>
+  </div>
+
+  <!-- Include your refactored PayPal script -->
+  <script nonce="<%= nonce %>">
+    // (Paste the refactored script from earlier here)
+  </script>
+</body>
+</html>
