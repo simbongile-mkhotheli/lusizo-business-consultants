@@ -8,7 +8,7 @@
 
   <!-- Modern CSS for payment page -->
   <style>
-    :root {
+     :root {
       --clr-primary:    #3b82f6;
       --clr-secondary:  #1e293b;
       --clr-bg:         #f8fafc;
@@ -20,7 +20,7 @@
       --transition:     0.3s ease;
     }
 
-    * {
+    *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -52,13 +52,12 @@
       transform: translateY(-4px);
     }
 
-    .payment-header {
+    header.payment-header {
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    .payment-header h1 {
-      font-size: 1.75rem;
-      color: var(--clr-secondary);
+    header.payment-header img {
+      max-width: 150px;
     }
 
     .service-card {
@@ -66,24 +65,28 @@
       row-gap: 1rem;
     }
 
-    .service-card h3 {
-      font-size: 1.25rem;
+    .service-card label {
+      font-weight: 500;
       color: var(--clr-secondary);
     }
 
-    .service-card input[type="number"] {
+    .service-card input {
       width: 100%;
       padding: 0.75rem;
       border: 1px solid var(--clr-border);
       border-radius: var(--radius);
       transition: border-color var(--transition);
+      text-align: right;
     }
-    .service-card input[type="number"]:focus {
+    .service-card input:focus {
       outline: none;
       border-color: var(--clr-primary);
     }
 
     .buy-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       background: var(--clr-primary);
       color: #fff;
       border: none;
@@ -93,14 +96,13 @@
       cursor: pointer;
       transition: background var(--transition);
     }
-    .buy-btn:hover {
+    .buy-btn:hover:not(:disabled) {
       background: #2563eb;
     }
-
-    .paypal-button-container {
-      margin-top: 1rem;
+    .buy-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
-
     @media (max-width: 480px) {
       .payment-container {
         padding: 1rem;
