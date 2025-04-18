@@ -1,15 +1,50 @@
 // /public/js/paypal.js
 document.addEventListener("DOMContentLoaded", async () => {
+  // 0) Modal Open/Close
+  initPaymentModal();
+
+  // 1) Load PayPal SDK
   try {
     await loadPayPalSDK();
-    attachBuyButtonHandlers();
   } catch (e) {
     console.error("❌ Failed to load PayPal SDK:", e);
-    alert("Could not load PayPal. Please try again later.");
+    return alert("Could not load PayPal. Please try again later.");
   }
+
+  // 2) Wire up your “Pay Custom” button inside the modal
+  attachBuyButtonHandlers();
 });
 
-// 1) Load SDK once, as a Promise
+
+/** Initialize the payment modal open/close behavior **/
+function initPaymentModal() {
+  const modal    = document.getElementById("payment-modal");
+  const openBtn  = document.getElementById("open-payment-modal");
+  const closeBtn = modal.querySelector(".modal-close");
+  const backdrop = modal.querySelector(".modal-backdrop");
+
+  const show = () => {
+    modal.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  };
+  const hide = () => {
+    modal.classList.add("hidden");
+    document.body.style.overflow = "";
+  };
+
+  openBtn.addEventListener("click", e => {
+    e.preventDefault();
+    show();
+  });
+  closeBtn.addEventListener("click", hide);
+  backdrop.addEventListener("click", hide);
+  modal.addEventListener("keydown", e => {
+    if (e.key === "Escape") hide();
+  });
+}
+
+
+/** Load PayPal SDK once **/
 function loadPayPalSDK() {
   return new Promise(async (resolve, reject) => {
     try {
@@ -18,8 +53,8 @@ function loadPayPalSDK() {
 
       const s = document.createElement("script");
       s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-      s.onload = () => resolve();
-      s.onerror = reject;
+      s.onload  = () => resolve();
+      s.onerror = () => reject(new Error("PayPal SDK failed to load"));
       document.head.appendChild(s);
     } catch (err) {
       reject(err);
@@ -27,7 +62,8 @@ function loadPayPalSDK() {
   });
 }
 
-// 2) Wire up the “Pay Custom” button
+
+/** Handle “Pay Custom” clicks and render the PayPal button **/
 function attachBuyButtonHandlers() {
   document.querySelectorAll(".buy-btn").forEach(btn => {
     btn.addEventListener("click", async e => {
@@ -39,12 +75,12 @@ function attachBuyButtonHandlers() {
       const raw       = card.querySelector("#custom-amount").value;
       const num       = parseFloat(raw);
 
-      // 2.1) Client‑side validation
+      // Client‑side validation
       if (isNaN(num) || num <= 0) {
         return alert("Enter a valid amount above zero.");
       }
 
-      // 2.2) Server‑side validation
+      // Server‑side validation
       const resp = await fetch("/api/validate-custom", {
         method: "POST",
         headers: {
@@ -59,21 +95,21 @@ function attachBuyButtonHandlers() {
       }
       const { amount } = await resp.json();
 
-      // 3) Show & clear the PayPal container
+      // Show & clear the PayPal container
       document.querySelectorAll(".paypal-button-container")
               .forEach(c => c.style.display = "none");
       container.style.display = "block";
       container.innerHTML = "";
 
-      // 4) Hide the “Pay Custom” button itself
+      // Hide the “Pay Custom” button itself
       btn.style.display = "none";
 
-      // 5) Render the PayPal Smart Button
+      // Render the PayPal Smart Button
       paypal.Buttons({
         createOrder: (_, actions) =>
           actions.order.create({
             purchase_units: [{
-              amount: { currency_code: "USD", value: amount },
+              amount:      { currency_code: "USD", value: amount },
               description: "Custom Payment"
             }]
           }),
@@ -90,7 +126,8 @@ function attachBuyButtonHandlers() {
   });
 }
 
-// 3) Save transaction
+
+/** Save transaction and then redirect home **/
 function saveTransaction(details, container) {
   const payload = {
     transaction_id: details.id,
@@ -114,13 +151,12 @@ function saveTransaction(details, container) {
   .then(r => {
     alert(r.success
       ? "Payment successful! Redirecting home…"
-      : "Paid—but not saved. Redirecting home...");
-    // Redirect once the user dismisses the alert
+      : "Paid—but not saved. Redirecting home…");
     window.location.href = "/";
   })
   .catch(e => {
     console.error(e);
-    alert("Error saving transaction—but payment completed. Redirecting home…");
+    alert("Error saving—but payment completed. Redirecting home…");
     window.location.href = "/";
   });
 }

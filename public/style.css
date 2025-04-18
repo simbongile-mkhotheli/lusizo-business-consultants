@@ -3331,3 +3331,56 @@
     }
     
   
+
+
+
+    :root {
+  --modal-bg:        rgba(0,0,0,0.5);
+  --modal-card-bg:   #fff;
+  --modal-radius:    0.5rem;
+  --modal-shadow:    0 4px 12px rgba(0,0,0,0.15);
+  --transition-fast: 0.2s ease-out;
+}
+
+.modal.hidden {
+  display: none;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--modal-bg);
+  transition: opacity var(--transition-fast);
+}
+.modal-content {
+  position: relative;
+  background: var(--modal-card-bg);
+  border-radius: var(--modal-radius);
+  box-shadow: var(--modal-shadow);
+  max-width: 400px;
+  width: 100%;
+  padding: 1.5rem;
+  z-index: 1001;
+  transform: translateY(-10px);
+  transition: transform var(--transition-fast);
+}
+.modal:not(.hidden) .modal-content {
+  transform: translateY(0);
+}
+.modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
