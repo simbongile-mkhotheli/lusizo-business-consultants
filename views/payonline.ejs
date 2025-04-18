@@ -178,7 +178,7 @@
   </div>
 
   <!-- PayPal SDK (deferred) -->
-  <script defer src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID&currency=USD"></script>
+<script defer nonce="<%= nonce %>" src="/js/paypal.js"></script>
   <!-- Custom JS (extract to payment.js if preferred) -->
   <script defer>
     document.addEventListener('DOMContentLoaded', () => {
