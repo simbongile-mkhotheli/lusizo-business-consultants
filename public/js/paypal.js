@@ -1,4 +1,4 @@
-// paypal.js
+// /public/js/paypal.js
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadPayPalSDK();
@@ -39,12 +39,12 @@ function attachBuyButtonHandlers() {
       const raw       = card.querySelector("#custom-amount").value;
       const num       = parseFloat(raw);
 
-      // validate
+      // 2.1) Client‑side validation
       if (isNaN(num) || num <= 0) {
         return alert("Enter a valid amount above zero.");
       }
 
-      // server‑side validation
+      // 2.2) Server‑side validation
       const resp = await fetch("/api/validate-custom", {
         method: "POST",
         headers: {
@@ -59,13 +59,16 @@ function attachBuyButtonHandlers() {
       }
       const { amount } = await resp.json();
 
-      // show & clear container
+      // 3) Show & clear the PayPal container
       document.querySelectorAll(".paypal-button-container")
               .forEach(c => c.style.display = "none");
       container.style.display = "block";
       container.innerHTML = "";
 
-      // finally render
+      // 4) Hide the “Pay Custom” button itself
+      btn.style.display = "none";
+
+      // 5) Render the PayPal Smart Button
       paypal.Buttons({
         createOrder: (_, actions) =>
           actions.order.create({
