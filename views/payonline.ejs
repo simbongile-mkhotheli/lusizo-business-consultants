@@ -188,9 +188,10 @@
       const spinner  = document.getElementById('btn-spinner');
       const feedback = document.getElementById('feedback');
 
-      // Enable button only when valid amount
+      // Enable button only when valid amount (replace comma with dot)
       amtInput.addEventListener('input', () => {
-        const num = parseFloat(amtInput.value);
+        const raw = amtInput.value.replace(',', '.');
+        const num = parseFloat(raw);
         payBtn.disabled = isNaN(num) || num < 0.01;
       });
 
@@ -203,7 +204,8 @@
         style: { layout: 'vertical', color: 'blue', shape: 'pill', label: 'pay' },
         funding: { disallowed: [ paypal.FUNDING.CREDIT ] },
         createOrder: (data, actions) => {
-          const value = parseFloat(amtInput.value).toFixed(2);
+          const raw = amtInput.value.replace(',', '.');
+          const value = parseFloat(raw).toFixed(2);
           return actions.order.create({ purchase_units: [{ amount: { value } }] });
         },
         onClick: () => {
