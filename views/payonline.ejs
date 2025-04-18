@@ -6,7 +6,7 @@
   <meta name="description" content="Securely pay invoices online for Lusizo Business Consultants.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- External CSS (you can extract this to payment.css) -->
+  <!-- External CSS (extract to payment.css if you wish) -->
   <style>
     :root {
       --clr-primary:    #3b82f6;
@@ -19,22 +19,25 @@
       --shadow-light:   0 2px 8px rgba(0,0,0,0.05);
       --transition:     0.3s ease;
     }
+
     *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
       font-family: "Inter", sans-serif;
     }
+
     body {
       background: var(--clr-bg);
       color: var(--clr-text);
+      line-height: 1.6;
       display: flex;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
       padding: 1rem;
-      line-height: 1.6;
     }
+
     .payment-container {
       background: var(--clr-card);
       border: 1px solid var(--clr-border);
@@ -48,40 +51,89 @@
     .payment-container:hover {
       transform: translateY(-4px);
     }
-    header.payment-header { text-align: center; margin-bottom: 1.5rem; }
-    header.payment-header img { max-width: 150px; }
-    .service-card { display: grid; row-gap: 1rem; }
-    .service-card label { font-weight: 500; color: var(--clr-secondary); }
+
+    header.payment-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    header.payment-header img {
+      max-width: 150px;
+    }
+
+    .service-card {
+      display: grid;
+      row-gap: 1rem;
+    }
+
+    .service-card label {
+      font-weight: 500;
+      color: var(--clr-secondary);
+    }
+
     .service-card input {
-      width: 100%; padding: 0.75rem;
+      width: 100%;
+      padding: 0.75rem;
       border: 1px solid var(--clr-border);
       border-radius: var(--radius);
       transition: border-color var(--transition);
-      text-align: right;
     }
-    .service-card input:focus { outline: none; border-color: var(--clr-primary); }
+    .service-card input:focus {
+      outline: none;
+      border-color: var(--clr-primary);
+    }
+
     .buy-btn {
-      display: inline-flex; align-items: center; justify-content: center;
-      background: var(--clr-primary); color: #fff; border: none;
-      padding: 0.75rem; font-size: 1rem; border-radius: var(--radius);
-      cursor: pointer; transition: background var(--transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--clr-primary);
+      color: #fff;
+      border: none;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background var(--transition);
     }
-    .buy-btn:hover { background: #2563eb; }
-    .spinner { width: 1rem; height: 1rem; margin-left: 0.5rem;
+    .buy-btn:hover:not(:disabled) {
+      background: #2563eb;
+    }
+    .buy-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 1rem;
+      height: 1rem;
+      margin-left: 0.5rem;
       animation: spin 1s linear infinite;
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
-    #feedback { margin-top: 1rem; padding: 0.75rem;
-      border-radius: var(--radius); font-size: 0.95rem; display: none;
+
+    #feedback {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      display: none;
     }
     #feedback.success { background: #d1fae5; color: #065f46; display: block; }
     #feedback.error   { background: #fee2e2; color: #991b1b; display: block; }
+
     .trust-badges {
-      display: flex; justify-content: center; gap: 0.5rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
       margin-top: 1rem;
     }
-    .trust-badges img { width: 40px; opacity: 0.8; transition: opacity var(--transition); }
+    .trust-badges img {
+      width: 40px;
+      opacity: 0.8;
+      transition: opacity var(--transition);
+    }
     .trust-badges img:hover { opacity: 1; }
+
     @media (max-width: 480px) {
       .payment-container { padding: 1rem; }
     }
@@ -92,19 +144,31 @@
     <header class="payment-header">
       <img src="/assets/logo.png" alt="Lusizo Business Consultants">
     </header>
+
     <main class="service-card">
       <label for="custom-amount">Amount (USD)</label>
-      <input id="custom-amount" type="text" placeholder="0.00"
-        aria-describedby="amount-help" inputmode="decimal" pattern="[0-9.]*" autocomplete="off" />
+      <input
+        type="number"
+        id="custom-amount"
+        placeholder="0.00"
+        aria-describedby="amount-help"
+        min="0.01"
+        step="0.01"
+        autocomplete="off"
+      />
       <small id="amount-help">Enter amount between $0.01 and $10,000</small>
-      <button id="pay-btn" class="buy-btn">
+
+      <button id="pay-btn" class="buy-btn" disabled>
         <span id="btn-text">Pay Now</span>
         <svg id="btn-spinner" class="spinner" viewBox="0 0 50 50" hidden>
           <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"/>
         </svg>
       </button>
+
       <div class="paypal-button-container"></div>
+
       <div id="feedback" role="alert" aria-live="polite"></div>
+
       <div class="trust-badges">
         <img src="/assets/ssl.svg" alt="Secure SSL">
         <img src="/assets/paypal-verified.svg" alt="PayPal Verified">
@@ -112,8 +176,10 @@
       </div>
     </main>
   </div>
-  <!-- PayPal SDK -->
+
+  <!-- PayPal SDK (deferred) -->
   <script defer src="https://www.paypal.com/sdk/js?client-id=YOUR_CLIENT_ID&currency=USD"></script>
+  <!-- Custom JS (extract to payment.js if preferred) -->
   <script defer>
     document.addEventListener('DOMContentLoaded', () => {
       const amtInput = document.getElementById('custom-amount');
@@ -121,26 +187,27 @@
       const btnText  = document.getElementById('btn-text');
       const spinner  = document.getElementById('btn-spinner');
       const feedback = document.getElementById('feedback');
-      const formatter = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      amtInput.addEventListener('blur', () => {
-        const raw = amtInput.value.replace(/[^0-9.]/g, '').trim();
-        const num = parseFloat(raw);
-        if (!isNaN(num)) amtInput.value = formatter.format(num);
+
+      // Enable button only when valid amount
+      amtInput.addEventListener('input', () => {
+        const num = parseFloat(amtInput.value);
+        payBtn.disabled = isNaN(num) || num < 0.01;
       });
+
       function showFeedback(type, msg) {
         feedback.className = type;
         feedback.textContent = msg;
       }
+
       paypal.Buttons({
         style: { layout: 'vertical', color: 'blue', shape: 'pill', label: 'pay' },
         funding: { disallowed: [ paypal.FUNDING.CREDIT ] },
         createOrder: (data, actions) => {
-          const raw = amtInput.value.replace(/,/g, '');
-          const value = parseFloat(raw).toFixed(2);
+          const value = parseFloat(amtInput.value).toFixed(2);
           return actions.order.create({ purchase_units: [{ amount: { value } }] });
         },
         onClick: () => {
-          payBtn.disabled = false;
+          payBtn.disabled = true;
           btnText.textContent = 'Processing…';
           spinner.hidden = false;
           feedback.textContent = '';
