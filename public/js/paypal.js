@@ -111,9 +111,16 @@ function saveTransaction(details, container) {
     body: JSON.stringify(payload)
   })
   .then(r => r.json())
-  .then(r => alert(r.success ? "Saved!" : "Paid—but not saved."))
-  .catch(e => { console.error(e); alert("Error saving transaction."); })
-  .finally(() => {
-    container.style.display = "none";
+  .then(r => {
+    alert(r.success
+      ? "Payment successful! Redirecting home…"
+      : "Paid—but not saved. Redirecting home...");
+    // Redirect once the user dismisses the alert
+    window.location.href = "/";
+  })
+  .catch(e => {
+    console.error(e);
+    alert("Error saving transaction—but payment completed. Redirecting home…");
+    window.location.href = "/";
   });
 }
