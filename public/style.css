@@ -365,10 +365,10 @@
   /*** Hero Section ***/
 
 
-  #custom-card {
-  display: none;
-}
-
+  /* Hide the custom card until Pay Online is clicked */
+  .service-card.custom {
+    display: none;
+  }
   
   .grid-hero {
     display: grid;
