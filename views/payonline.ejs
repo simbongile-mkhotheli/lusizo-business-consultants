@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Pay Online</title>
   <meta name="csrf-token" content="<%= csrfToken %>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Modern CSS for payment page -->
   <style>
     :root {
       --clr-primary:    #3b82f6;
@@ -19,26 +18,34 @@
       --shadow-light:   0 2px 8px rgba(0,0,0,0.05);
       --transition:     0.3s ease;
     }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: "Inter", sans-serif;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Inter", sans-serif; }
 
     body {
       background: var(--clr-bg);
       color: var(--clr-text);
-      line-height: 1.6;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
       padding: 1rem;
     }
 
-    .payment-container {
+    /* 1) The overlay */
+    .modal {
+      display: none;               /* hidden by default */
+      position: fixed;             
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal.show {
+      display: flex;               /* when .show, it appears */
+    }
+
+    /* 2) The modal “window” */
+    .modal-content {
       background: var(--clr-card);
       border: 1px solid var(--clr-border);
       border-radius: var(--radius);
@@ -46,90 +53,87 @@
       max-width: 400px;
       width: 100%;
       padding: 2rem;
+      position: relative;
+      transform: translateY(0);
       transition: transform var(--transition);
     }
-    .payment-container:hover {
+    .modal-content:hover {
       transform: translateY(-4px);
     }
 
-    .payment-header {
-      text-align: center;
-      margin-bottom: 1.5rem;
-    }
-    .payment-header h1 {
-      font-size: 1.75rem;
-      color: var(--clr-secondary);
-    }
-
-    .service-card {
-      display: grid;
-      row-gap: 1rem;
-    }
-
-    .service-card h3 {
+    /* 3) Close button */
+    .modal-close {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
       font-size: 1.25rem;
+      background: none;
+      border: none;
       color: var(--clr-secondary);
+      cursor: pointer;
     }
 
+    /* Your inner payment styles */
+    .payment-header { text-align: center; margin-bottom: 1.5rem; }
+    .payment-header h1 { font-size: 1.75rem; color: var(--clr-secondary); }
+    .service-card { display: grid; row-gap: 1rem; }
     .service-card input[type="number"] {
-      width: 100%;
-      padding: 0.75rem;
+      width: 100%; padding: 0.75rem;
       border: 1px solid var(--clr-border);
       border-radius: var(--radius);
       transition: border-color var(--transition);
     }
-    .service-card input[type="number"]:focus {
-      outline: none;
-      border-color: var(--clr-primary);
-    }
-
+    .service-card input[type="number"]:focus { outline: none; border-color: var(--clr-primary); }
     .buy-btn {
-      background: var(--clr-primary);
-      color: #fff;
-      border: none;
-      padding: 0.75rem;
-      font-size: 1rem;
-      border-radius: var(--radius);
-      cursor: pointer;
-      transition: background var(--transition);
+      background: var(--clr-primary); color: #fff; border: none;
+      padding: 0.75rem; font-size: 1rem; border-radius: var(--radius);
+      cursor: pointer; transition: background var(--transition);
     }
-    .buy-btn:hover {
-      background: #2563eb;
-    }
-
-    .paypal-button-container {
-      margin-top: 1rem;
-    }
-
+    .buy-btn:hover { background: #2563eb; }
+    .paypal-button-container { margin-top: 1rem; }
     @media (max-width: 480px) {
-      .payment-container {
-        padding: 1rem;
-      }
+      .modal-content { padding: 1rem; }
     }
   </style>
 </head>
 <body>
 
-  <div class="payment-container">
-    <header class="payment-header">
-      <h1>Pay Online</h1>
-    </header>
+  <!-- Trigger button (can be anywhere) -->
+  <button id="openPay" class="buy-btn">Open Pay Modal</button>
 
-    <div class="service-card custom" id="custom-card">
-      <h3> Amount</h3>
-      <input
-        type="number"
-        id="custom-amount"
-        placeholder="Enter amount"
-        min="0.01"
-        step="0.01"
-      />
-      <button class="buy-btn" data-service="custom">Pay Custom</button>
-      <div class="paypal-button-container"></div>
+  <!-- The Modal -->
+  <div id="payModal" class="modal">
+    <div class="modal-content">
+      <button class="modal-close" id="closePay">&times;</button>
+      <header class="payment-header">
+        <h1>Pay Online</h1>
+      </header>
+      <div class="service-card custom" id="custom-card">
+        <h3>Amount</h3>
+        <input type="number" id="custom-amount" placeholder="Enter amount" min="0.01" step="0.01"/>
+        <button class="buy-btn" data-service="custom">Pay Custom</button>
+        <div class="paypal-button-container"></div>
+      </div>
     </div>
   </div>
 
-  <!-- PayPal logic (same paypal.js or inline) -->
+  <!-- Your PayPal script -->
   <script nonce="<%= nonce %>" src="/js/paypal.js"></script>
+
+  <!-- Modal toggle logic -->
+  <script>
+    const modal = document.getElementById("payModal");
+    document.getElementById("openPay").addEventListener("click", () => {
+      modal.classList.add("show");
+    });
+    document.getElementById("closePay").addEventListener("click", () => {
+      modal.classList.remove("show");
+    });
+    // Optional: close when clicking outside content
+    modal.addEventListener("click", e => {
+      if(e.target === modal) modal.classList.remove("show");
+    });
+  </script>
+
 </body>
 </html>
