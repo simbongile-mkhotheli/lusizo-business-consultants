@@ -365,7 +365,7 @@
   /*** Hero Section ***/
 
 
-  /* Hide the custom card until Pay Online is clicked */
+  /* hide the custom card until Pay Online is clicked */
   .service-card.custom {
     display: none;
   }
