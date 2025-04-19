@@ -1610,63 +1610,41 @@ class="contact-left-part-image"
 
 
 
-
 <input id="custom-amount" placeholder="Enter amount" />
-<button id="pay-btn">
+<button id="pay-btn" disabled>
   <span id="btn-text">Pay Now</span>
   <span id="btn-spinner" hidden>⏳</span>
 </button>
 <div id="feedback"></div>
 <div class="paypal-button-container"></div>
 
-<!-- Main inline script with nonce -->
-<script nonce="<%= nonce %>">
+<script type="module" nonce="<%= nonce %>">
+  import { initPaymentHandlers } from "/js/payment.js";
+
+  async function loadPayPalSDK() {
+    const { clientId } = await fetch("/config/paypal").then(res => res.json());
+    if (!clientId) throw new Error("Missing PayPal client ID");
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+      script.onload = () => resolve(window.paypal);
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", async () => {
     try {
-      await loadPayPalSDK();
-      attachPayOnlineToggle();
-      attachBuyButtonHandlers();
-
-      // Call external payment handlers (waited for SDK to be loaded)
-      window.initPaymentHandlers();
-    } catch (e) {
-      console.error("❌ Failed to load PayPal SDK:", e);
-      alert("Payment functionality could not be initialized.");
+      const paypal = await loadPayPalSDK();
+      initPaymentHandlers(paypal);
+    } catch (err) {
+      console.error("Payment functionality could not be initialized.", err);
+      alert("Failed to load PayPal. Please try again later.");
     }
   });
-
-  // Load PayPal SDK dynamically
-  function loadPayPalSDK() {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const { clientId } = await fetch("/config/paypal").then(r => r.json());
-        if (!clientId) throw new Error("Missing PayPal Client ID");
-
-        const s = document.createElement("script");
-        s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-        s.onload = () => resolve();
-        s.onerror = reject;
-        document.head.appendChild(s);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  }
-
-  function attachPayOnlineToggle() {
-    const btn = document.getElementById("pay-online-btn");
-    const card = document.getElementById("custom-card");
-    btn?.addEventListener("click", e => {
-      e.preventDefault();
-      card.style.display = card.style.display === "block" ? "none" : "block";
-      if (card.style.display === "block") card.scrollIntoView({ behavior: "smooth" });
-    });
-  }
-
-  function attachBuyButtonHandlers() {
-    // Buttons are already handled by payment.js when SDK is ready
-  }
 </script>
+
 
 <!-- Load external logic -->
 <script nonce="<%= nonce %>" src="/js/payment.js"></script>
