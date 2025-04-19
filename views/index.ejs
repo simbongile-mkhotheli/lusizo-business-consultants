@@ -35,8 +35,6 @@
 
 
 
-
-
 </head>
 <body>
 
@@ -733,7 +731,7 @@
     <p class="card-details">
       Lorem ipsum dolor sit amet, consectetur adipiscing elit.
     </p>
-    <a class="button button--outline buy-btn"> Pay NowA </a>
+    <a class="button button--outline buy-btn"> Pay Now </a>
   
   </div>
   
@@ -1607,47 +1605,169 @@ class="contact-left-part-image"
 
 
 
+<script nonce="<%= nonce %>">
+  document.addEventListener("DOMContentLoaded", async () => {
+    try {
+      await loadPayPalSDK();
+      attachPayOnlineToggle();
+      attachBuyButtonHandlers();
+    } catch (e) {
+      console.error("❌ Failed to load PayPal SDK:", e);
+      alert("Could not load PayPal. Please try again later.");
+    }
+  });
 
+  // 1) Load PayPal JS SDK once, as a Promise
+  function loadPayPalSDK() {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { clientId } = await fetch("/config/paypal").then(r => r.json());
+        if (!clientId) throw new Error("Missing PayPal Client ID");
 
-
-<input id="custom-amount" placeholder="Enter amount" />
-<button id="pay-btn" disabled>
-  <span id="btn-text">Pay Now</span>
-  <span id="btn-spinner" hidden>⏳</span>
-</button>
-<div id="feedback"></div>
-<div class="paypal-button-container"></div>
-
-<script type="module" nonce="<%= nonce %>">
-  import { initPaymentHandlers } from "/js/payment.js";
-
-  async function loadPayPalSDK() {
-    const { clientId } = await fetch("/config/paypal").then(res => res.json());
-    if (!clientId) throw new Error("Missing PayPal client ID");
-
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-      script.onload = () => resolve(window.paypal);
-      script.onerror = reject;
-      document.head.appendChild(script);
+        const s = document.createElement("script");
+        s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+        s.onload = () => resolve();
+        s.onerror = reject;
+        document.head.appendChild(s);
+      } catch (err) {
+        reject(err);
+      }
     });
   }
 
-  document.addEventListener("DOMContentLoaded", async () => {
-    try {
-      const paypal = await loadPayPalSDK();
-      initPaymentHandlers(paypal);
-    } catch (err) {
-      console.error("Payment functionality could not be initialized.", err);
-      alert("Failed to load PayPal. Please try again later.");
-    }
-  });
+  // 2) “Pay Online” link toggles the custom‑amount card
+  function attachPayOnlineToggle() {
+    const payOnlineBtn = document.getElementById("pay-online-btn");
+    const customCard   = document.getElementById("custom-card");
+    payOnlineBtn.addEventListener("click", e => {
+      e.preventDefault();
+      customCard.style.display = customCard.style.display === "block" ? "none" : "block";
+      if (customCard.style.display === "block") {
+        customCard.scrollIntoView({ behavior: "smooth" });
+      }
+    });
+  }
+
+  // 3) On “Pay Custom” click, show its container _then_ render the button
+  function attachBuyButtonHandlers() {
+    document.querySelectorAll(".buy-btn").forEach(btn => {
+      btn.addEventListener("click", async e => {
+        e.preventDefault();
+        console.log("👉 Buy‑button clicked:", btn);
+
+        const svc = btn.dataset.service;
+        const card = btn.closest(".service-card");
+        const container = card.querySelector(".paypal-button-container");
+
+        // hide any other PayPal containers
+        document.querySelectorAll(".paypal-button-container")
+                .forEach(c => c.style.display = "none");
+
+        container.style.display = "block";    // first make it visible
+        container.innerHTML = "";             // clear any old render
+
+        // fetch & validate your payload
+        let amount, description;
+        if (svc === "custom") {
+          const raw = card.querySelector("#custom-amount").value;
+          const num = parseFloat(raw);
+          if (isNaN(num) || num <= 0) {
+            return alert("Enter a valid amount above zero.");
+          }
+          const resp = await fetch("/api/validate-custom", {
+            method: "POST",
+            headers: {
+              "Content-Type":"application/json",
+              "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ amount: num })
+          });
+          if (!resp.ok) {
+            const err = await resp.json();
+            return alert(err.error?.message || "Invalid amount");
+          }
+          amount = (await resp.json()).amount;
+          description = "Custom Payment";
+        } else {
+          // (if you add fixed‑price cards later)
+          const resp = await fetch("/api/validate-service", {
+            method: "POST",
+            headers: {
+              "Content-Type":"application/json",
+              "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({ name: svc })
+          });
+          if (!resp.ok) {
+            const err = await resp.json();
+            return alert(err.error?.message || "Invalid service");
+          }
+          const svcData = await resp.json();
+          amount = svcData.price;
+          description = svcData.name;
+        }
+
+        // now _that_ the container is visible, render the button into it
+        paypal.Buttons({
+          createOrder: (_, actions) =>
+            actions.order.create({
+              purchase_units: [{
+                amount: { currency_code: "USD", value: amount },
+                description
+              }]
+            }),
+          onApprove: (_, actions) =>
+            actions.order.capture().then(details =>
+              saveTransaction(details, container)
+            ),
+          onError: err => {
+            console.error("PayPal error:", err);
+            alert("Payment error—please try again.");
+          }
+        }).render(container);
+      });
+    });
+  }
+
+  // 4) Save the transaction (unchanged)
+  function saveTransaction(details, container) {
+    const payload = {
+      transaction_id: details.id,
+      payer_name:     details.payer.name.given_name,
+      payer_email:    details.payer.email_address,
+      amount:         details.purchase_units[0].amount.value,
+      currency:       details.purchase_units[0].amount.currency_code,
+      payment_status: details.status,
+      service_type:   details.purchase_units[0].description
+    };
+
+    return fetch("/save-transaction", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "x-csrf-token": document.querySelector('meta[name="csrf-token"]').content
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(r => alert(r.success ? "Saved!" : "Paid but not saved—contact support."))
+    .catch(e => { console.error(e); alert("Error saving transaction."); })
+    .finally(() => {
+      container.style.display = "none";
+    });
+  }
 </script>
 
-
-<!-- Load external logic -->
 <script nonce="<%= nonce %>" src="/js/payment.js"></script>
+
+
+
+
+
+
+
+
+
 
 
 
