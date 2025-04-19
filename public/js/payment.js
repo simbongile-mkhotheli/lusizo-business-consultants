@@ -1,70 +1,97 @@
+// public/js/payment.js
 
-// Immediately-Invoked Function to expose initPaymentHandlers
-en(function(window) {
-  function initPaymentHandlers() {
-    document.querySelectorAll('.buy-btn').forEach(btn => {
-      btn.addEventListener('click', async e => {
-        e.preventDefault();
-        const svc    = btn.dataset.service;
-        const card   = btn.closest('.service-card');
-        const container = card.querySelector('.paypal-button-container');
+// Expose init globally for inline bootstrapper
+window.initPaymentHandlers = function () {
+  setupCustomAmountFlow();
+  setupBuyButtonsFlow();
+};
 
-        // Hide previous containers
-        document.querySelectorAll('.paypal-button-container')
-                .forEach(c => c.style.display = 'none');
+function setupCustomAmountFlow() {
+  const amountInput = document.getElementById("custom-amount");
+  const payButton = document.getElementById("pay-btn");
+  const btnText = document.getElementById("btn-text");
+  const spinner = document.getElementById("btn-spinner");
+  const feedback = document.getElementById("feedback");
 
-        container.style.display = 'block';
-        container.innerHTML = '';
+  const validateAmount = () => {
+    const raw = amountInput.value.replace(',', '.');
+    const num = parseFloat(raw);
+    payButton.disabled = isNaN(num) || num < 0.01;
+  };
 
-        // Fetch & validate amount via your API
-        let amount, description;
-        if (svc === 'custom') {
-          const raw = card.querySelector('#custom-amount').value.replace(',', '.');
-          const num = parseFloat(raw);
-          if (isNaN(num) || num < 0.01) {
-            alert('Enter a valid amount above zero.');
-            return;
-          }
+  amountInput?.addEventListener("input", validateAmount);
+  validateAmount();
 
-          const resp = await fetch('/api/validate-custom', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-csrf-token': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ amount: num })
-          });
+  payButton?.addEventListener("click", async e => {
+    e.preventDefault();
+    const value = parseFloat(amountInput.value.replace(',', '.')).toFixed(2);
+    renderPayPalButtons(value, "Custom Payment", feedback, btnText, spinner, payButton);
+  });
+}
 
-          if (!resp.ok) {
-            const err = await resp.json();
-            alert(err.error?.message || 'Invalid amount');
-            return;
-          }
+function setupBuyButtonsFlow() {
+  const buttons = document.querySelectorAll(".buy-btn");
+  buttons.forEach(button => {
+    button.addEventListener("click", e => {
+      e.preventDefault();
+      const amount = button.getAttribute("data-amount");
+      const description = button.getAttribute("data-desc") || "Purchase";
 
-          amount = (await resp.json()).amount;
-          description = 'Custom Payment';
-        }
+      const container = button.closest(".service")?.querySelector(".paypal-button-container");
+      if (!container) return;
 
-        // Render PayPal Buttons now that SDK is loaded
-        window.paypal.Buttons({
-          createOrder: (data, actions) =>
-            actions.order.create({
-              purchase_units: [{ amount: { value: amount.toString(), currency_code: 'USD' }, description }]
-            }),
-          onApprove: (data, actions) =>
-            actions.order.capture().then(details => {
-              alert(`Payment of $${details.purchase_units[0].amount.value} successful!`);
-              container.style.display = 'none';
-            }),
-          onError: err => {
-            console.error('PayPal error:', err);
-            alert('Payment error—please try again.');
-          }
-        }).render(container);
-      });
+      container.innerHTML = "";
+      container.style.display = "block";
+
+      renderPayPalButtons(amount, description, container, button, null, button);
     });
+  });
+}
+
+function renderPayPalButtons(amount, description, feedbackEl, btnTextEl, spinnerEl, disableBtn) {
+  if (!window.paypal) {
+    console.error("PayPal SDK not loaded");
+    return;
   }
 
-  // Expose for index.ejs to call
-  window.initPaymentHandlers = initPaymentHandlers;
-})(window);
+  window.paypal.Buttons({
+    style: {
+      layout: 'vertical',
+      color: 'blue',
+      shape: 'pill',
+      label: 'pay'
+    },
+    createOrder: (data, actions) => {
+      return actions.order.create({
+        purchase_units: [{
+          amount: { value: amount },
+          description
+        }]
+      });
+    },
+    onClick: () => {
+      if (disableBtn) disableBtn.disabled = true;
+      if (btnTextEl) btnTextEl.textContent = "Processing…";
+      if (spinnerEl) spinnerEl.hidden = false;
+      if (feedbackEl) feedbackEl.textContent = "";
+    },
+    onApprove: (data, actions) => {
+      return actions.order.capture().then(details => {
+        if (feedbackEl) {
+          feedbackEl.className = "success";
+          feedbackEl.textContent = `Payment of $${details.purchase_units[0].amount.value} successful!`;
+        }
+      });
+    },
+    onError: err => {
+      console.error(err);
+      if (disableBtn) disableBtn.disabled = false;
+      if (btnTextEl) btnTextEl.textContent = "Pay Now";
+      if (spinnerEl) spinnerEl.hidden = true;
+      if (feedbackEl) {
+        feedbackEl.className = "error";
+        feedbackEl.textContent = "Something went wrong. Please try again.";
+      }
+    }
+  }).render(feedbackEl.closest(".paypal-button-container") || feedbackEl);
+}

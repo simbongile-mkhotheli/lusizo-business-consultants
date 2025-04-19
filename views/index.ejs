@@ -1611,78 +1611,67 @@ class="contact-left-part-image"
 
 
 
-  <!-- Your markup (button to trigger, custom card, etc.) -->
-  <a href="#" id="pay-online-btn">Pay Online</a>
-  <div class="service-card" id="custom-card" style="display:none;">
-    <label for="custom-amount">Amount (USD)</label>
-    <input type="number" id="custom-amount" placeholder="0.00" min="0.01" step="0.01" aria-describedby="amount-help" autocomplete="off" />
-    <small id="amount-help">Enter amount between $0.01 and $10,000</small>
-    <button class="buy-btn" data-service="custom">Pay Custom</button>
-    <div class="paypal-button-container" style="display:none;"></div>
-  </div>
+<input id="custom-amount" placeholder="Enter amount" />
+<button id="pay-btn">
+  <span id="btn-text">Pay Now</span>
+  <span id="btn-spinner" hidden>⏳</span>
+</button>
+<div id="feedback"></div>
+<div class="paypal-button-container"></div>
 
-  <!-- 1) Inline bootstrapper (nonce'd) -->
-  <script nonce="<%= nonce %>">
-    document.addEventListener("DOMContentLoaded", async () => {
+<!-- Main inline script with nonce -->
+<script nonce="<%= nonce %>">
+  document.addEventListener("DOMContentLoaded", async () => {
+    try {
+      await loadPayPalSDK();
+      attachPayOnlineToggle();
+      attachBuyButtonHandlers();
+
+      // Call external payment handlers (waited for SDK to be loaded)
+      window.initPaymentHandlers();
+    } catch (e) {
+      console.error("❌ Failed to load PayPal SDK:", e);
+      alert("Payment functionality could not be initialized.");
+    }
+  });
+
+  // Load PayPal SDK dynamically
+  function loadPayPalSDK() {
+    return new Promise(async (resolve, reject) => {
       try {
-        // 1. Dynamically load PayPal SDK
-        await loadPayPalSDK();
+        const { clientId } = await fetch("/config/paypal").then(r => r.json());
+        if (!clientId) throw new Error("Missing PayPal Client ID");
 
-        // 2. Wire up UI toggles and validators
-        attachPayOnlineToggle();
-        attachBuyButtonHandlers();
-
-        // 3. Initialize external payment handlers
-        window.initPaymentHandlers();
-      } catch (e) {
-        console.error("❌ Failed to load PayPal SDK:", e);
-        alert("Payment functionality could not be initialized.");
+        const s = document.createElement("script");
+        s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+        s.onload = () => resolve();
+        s.onerror = reject;
+        document.head.appendChild(s);
+      } catch (err) {
+        reject(err);
       }
     });
+  }
 
-    // Load PayPal SDK as a promise
-    function loadPayPalSDK() {
-      return new Promise(async (resolve, reject) => {
-        try {
-          const { clientId } = await fetch("/config/paypal").then(r => r.json());
-          if (!clientId) throw new Error("Missing PayPal Client ID");
+  function attachPayOnlineToggle() {
+    const btn = document.getElementById("pay-online-btn");
+    const card = document.getElementById("custom-card");
+    btn?.addEventListener("click", e => {
+      e.preventDefault();
+      card.style.display = card.style.display === "block" ? "none" : "block";
+      if (card.style.display === "block") card.scrollIntoView({ behavior: "smooth" });
+    });
+  }
 
-          const s = document.createElement("script");
-          s.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
-          s.onload = () => resolve();
-          s.onerror = reject;
-          document.head.appendChild(s);
-        } catch (err) {
-          reject(err);
-        }
-      });
-    }
+  function attachBuyButtonHandlers() {
+    // Buttons are already handled by payment.js when SDK is ready
+  }
+</script>
 
-    // Toggle custom amount card
-    function attachPayOnlineToggle() {
-      const btn = document.getElementById("pay-online-btn");
-      const card = document.getElementById("custom-card");
-      btn.addEventListener("click", e => {
-        e.preventDefault();
-        card.style.display = card.style.display === "block" ? "none" : "block";
-        if (card.style.display === "block") card.scrollIntoView({ behavior: "smooth" });
-      });
-    }
-
-    // Prepare server validation and button show
-    function attachBuyButtonHandlers() {
-      document.querySelectorAll(".buy-btn").forEach(btn => {
-        btn.addEventListener("click", e => {
-          e.preventDefault();
-          // container visibility handled in payment.js
-        });
-      });
-    }
-  </script>
+<!-- Load external logic -->
+<script nonce="<%= nonce %>" src="/js/payment.js"></script>
 
 
-  <!-- 2) External JS: payment logic -->
-  <script nonce="<%= nonce %>" src="/js/payment.js"></script>
 
 
   <script nonce="<%= nonce %>" src="/js/script.js"></script>
